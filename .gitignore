@@ -1,0 +1,12 @@
+# Lake build artifacts and fetched dependencies
+/.lake/
+
+# Lake layout before v4.3.0
+/build/
+/lake-packages/
+
+# Editor / OS noise
+.DS_Store
+*.olean
+*.ilean
+*.trace
