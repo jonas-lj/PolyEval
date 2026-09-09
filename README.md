@@ -20,6 +20,20 @@ additions and `deg P` multiplications of Horner's rule.
 * `PolyEval.table_eq_zero_of_lt` — for a polynomial of degree at most `d` the table vanishes above
   entry `d`, so `d + 1` entries suffice and the algorithm is finite.
 
+* `PolyEval.step_iterate_diffPasses_eval_zero` — correctness of the whole algorithm on an array of
+  length `d + 1`, initialisation included:
+
+  ```lean
+  theorem step_iterate_diffPasses_eval_zero {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
+      (i : ℕ) :
+      step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h)
+  ```
+
+  Here `diffPasses d` is the differencing triangle `y j ← y j - y (j - 1)` that an implementation
+  runs on the values of `P` at the first `d + 1` points, and `truncate d` reads the result as a
+  length-`d + 1` array. `PolyEval.truncate_diffPasses_eval` is the step that identifies it with the
+  difference table.
+
 * `PolyEval.fwdDiff_iter_eval_eq_zero` — `Δ_[h]^[n] P.eval = 0` when `P.natDegree < n`. Mathlib has
   this only for step size `1` (`Polynomial.fwdDiff_iter_eq_zero_of_degree_lt`); this generalises it
   to an arbitrary step.

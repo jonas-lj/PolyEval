@@ -15,6 +15,12 @@ additions and no multiplications per point.
 `step_iterate_zero` proves this for an arbitrary function, and `table_eq_zero_of_lt` shows that for
 a polynomial of degree at most `d` the table vanishes above entry `d`, so `d + 1` entries suffice.
 
+An implementation starts from the values of `P` at the first `d + 1` points of the progression and
+turns them into the table by repeated differencing, `y j ← y j - y (j - 1)`. `diffPasses` is that
+initialisation and `truncate_diffPasses_eval` proves it builds `table`, so
+`step_iterate_diffPasses_eval_zero` states correctness of the whole algorithm, initialisation
+included, on an array of length `d + 1`.
+
 The algorithm is described at <https://www.jonaslindstrom.dk/?p=1306>.
 -/
 
@@ -54,6 +60,40 @@ theorem step_iterate (h : M) (f : M → G) (x : M) (i : ℕ) :
 theorem step_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
     step^[i] (table h f x) 0 = f (x + i • h) := by
   rw [step_iterate]
+  simp [table]
+
+/-- Zero-extension of the length-`d + 1` array `y 0, ..., y d`. -/
+def truncate (d : ℕ) (y : ℕ → G) : ℕ → G := fun j ↦ if j ≤ d then y j else 0
+
+/-- One pass of the initialisation: `y j ← y j - y (j - 1)` for `j ≥ k`, leaving `j < k` fixed. -/
+def diffPass (k : ℕ) (y : ℕ → G) : ℕ → G := fun j ↦ if k ≤ j then y j - y (j - 1) else y j
+
+/-- The initialisation: the passes `diffPass 1`, ..., `diffPass k`, applied in that order. -/
+def diffPasses : ℕ → (ℕ → G) → (ℕ → G)
+  | 0, y => y
+  | k + 1, y => diffPass (k + 1) (diffPasses k y)
+
+/-- After `k` passes over the values of `f` along the progression, entry `j` holds
+`Δ_[h]^[min j k] f (x + (j - min j k) • h)`. -/
+theorem diffPasses_apply (h x : M) (f : M → G) (k j : ℕ) :
+    diffPasses k (fun i ↦ f (x + i • h)) j = Δ_[h]^[min j k] f (x + (j - min j k) • h) := by
+  induction k generalizing j with
+  | zero => simp [diffPasses]
+  | succ k ih =>
+      rw [diffPasses]
+      simp only [diffPass]
+      by_cases hj : k + 1 ≤ j
+      · rw [if_pos hj, ih, ih, min_eq_right (by omega : k ≤ j),
+          min_eq_right (by omega : k ≤ j - 1), min_eq_right hj,
+          show j - k = (j - (k + 1)) + 1 from by omega, show j - 1 - k = j - (k + 1) from by omega,
+          succ_nsmul, ← add_assoc, iterate_succ_apply' (fwdDiff h) k f]
+        simp [fwdDiff]
+      · rw [if_neg hj, ih, min_eq_left (by omega : j ≤ k), min_eq_left (by omega : j ≤ k + 1)]
+
+/-- The entries `j ≤ k` of the initialisation are those of the difference table. -/
+theorem diffPasses_eq_table (h x : M) (f : M → G) {k j : ℕ} (hj : j ≤ k) :
+    diffPasses k (fun i ↦ f (x + i • h)) j = table h f x j := by
+  rw [diffPasses_apply, min_eq_left hj]
   simp [table]
 
 section Eval
@@ -100,6 +140,29 @@ theorem table_eq_zero_of_lt {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x :
 theorem step_iterate_zero_eval (P : R[X]) (h x : R) (i : ℕ) :
     step^[i] (table h P.eval x) 0 = P.eval (x + i * h) := by
   simpa [nsmul_eq_mul] using step_iterate_zero h P.eval x i
+
+/-- The initialisation is correct. For `P` of degree at most `d`, running the differencing passes
+on the values of `P` at the first `d + 1` points of the progression, and reading the result as a
+length-`d + 1` array, gives exactly `table h P.eval x`. -/
+theorem truncate_diffPasses_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R) :
+    truncate d (diffPasses d fun i ↦ P.eval (x + i * h)) = table h P.eval x := by
+  rw [show (fun i : ℕ ↦ P.eval (x + i * h)) = fun i : ℕ ↦ P.eval (x + i • h) from by
+    simp [nsmul_eq_mul]]
+  funext j
+  simp only [truncate]
+  by_cases hj : j ≤ d
+  · rw [if_pos hj]
+    exact diffPasses_eq_table h x P.eval hj
+  · rw [if_neg hj]
+    exact (table_eq_zero_of_lt hP h x (by omega)).symm
+
+/-- Correctness of the algorithm as implemented on a length-`d + 1` array: initialise it with the
+values of `P` at the first `d + 1` points, run the differencing passes, then step `i` times; entry
+`0` is `P.eval (x + i * h)`. -/
+theorem step_iterate_diffPasses_eval_zero {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
+    (i : ℕ) :
+    step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h) := by
+  rw [truncate_diffPasses_eval hP, step_iterate_zero_eval]
 
 end Eval
 
