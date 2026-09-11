@@ -20,11 +20,11 @@ additions and `deg P` multiplications of Horner's rule.
 * `PolyEval.table_eq_zero_of_lt` — for a polynomial of degree at most `d` the table vanishes above
   entry `d`, so `d + 1` entries suffice and the algorithm is finite.
 
-* `PolyEval.step_iterate_diffPasses_eval_zero` — correctness of the whole algorithm on an array of
+* `PolyEval.step_iterate_diffPasses_zero_eval` — correctness of the whole algorithm on an array of
   length `d + 1`, initialisation included:
 
   ```lean
-  theorem step_iterate_diffPasses_eval_zero {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
+  theorem step_iterate_diffPasses_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
       (i : ℕ) :
       step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h)
   ```

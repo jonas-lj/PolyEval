@@ -18,7 +18,7 @@ a polynomial of degree at most `d` the table vanishes above entry `d`, so `d + 1
 An implementation starts from the values of `P` at the first `d + 1` points of the progression and
 turns them into the table by repeated differencing, `y j ← y j - y (j - 1)`. `diffPasses` is that
 initialisation and `truncate_diffPasses_eval` proves it builds `table`, so
-`step_iterate_diffPasses_eval_zero` states correctness of the whole algorithm, initialisation
+`step_iterate_diffPasses_zero_eval` states correctness of the whole algorithm, initialisation
 included, on an array of length `d + 1`.
 
 The algorithm is described at <https://www.jonaslindstrom.dk/?p=1306>.
@@ -157,9 +157,9 @@ theorem truncate_diffPasses_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (
     exact (table_eq_zero_of_lt hP h x (by omega)).symm
 
 /-- Correctness of the algorithm as implemented on a length-`d + 1` array: initialise it with the
-values of `P` at the first `d + 1` points, run the differencing passes, then step `i` times; entry
-`0` is `P.eval (x + i * h)`. -/
-theorem step_iterate_diffPasses_eval_zero {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
+values of `P` at the first `d + 1` points, run the differencing passes, then step `i` times. The
+head of the array then holds `P.eval (x + i * h)`. -/
+theorem step_iterate_diffPasses_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
     (i : ℕ) :
     step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h) := by
   rw [truncate_diffPasses_eval hP, step_iterate_zero_eval]
