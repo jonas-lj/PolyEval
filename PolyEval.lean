@@ -94,12 +94,7 @@ theorem diffPasses_eq_table (h x : M) (f : M → G) {k j : ℕ} (hj : j ≤ k) :
 
 /-- `Δ_[h]^[k] 0 = 0` -/
 theorem fwdDiff_iter_zero (h : M) (k : ℕ) : Δ_[h]^[k] (0 : M → G) = 0 := by
-  induction k with
-  | zero => rfl
-  | succ k ih =>
-      rw [iterate_succ_apply', ih]
-      funext x
-      simp [fwdDiff]
+  simpa only [fwdDiff_aux.coe_fwdDiffₗ_pow] using map_zero (fwdDiff_aux.fwdDiffₗ M G h ^ k)
 
 /-- If the `d + 1`-st difference of `f` vanishes then so does every higher one. -/
 theorem fwdDiff_iter_eq_zero_of_lt {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0) {j : ℕ}
