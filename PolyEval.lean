@@ -275,12 +275,12 @@ open Polynomial
 
 variable {R : Type*} [CommRing R]
 
-/-- Δ_1 (s ↦ g(h·s + x))(t) = Δ_h g(h·t + x) -/
+/-- Differencing s ↦ g(h·s + x) with step 1, at t, gives Δ_h g at h·t + x. -/
 theorem fwdDiff_comp_affine (h x : R) (g : R → G) (t : R) :
     Δ_[1] (fun s ↦ g (h * s + x)) t = Δ_[h] g (h * t + x) := by
   simp [fwdDiff, mul_add, add_right_comm]
 
-/-- Δ_1^n (s ↦ g(h·s + x))(t) = Δ_h^n g(h·t + x) -/
+/-- Differencing s ↦ g(h·s + x) n times with step 1, at t, gives Δ_h^n g at h·t + x. -/
 theorem fwdDiff_iter_comp_affine (n : ℕ) (h x : R) (g : R → G) (t : R) :
     Δ_[1]^[n] (fun s ↦ g (h * s + x)) t = Δ_[h]^[n] g (h * t + x) := by
   induction n generalizing g with
@@ -317,7 +317,7 @@ and the variable running over R. This is `fastcrypto`'s `Poly<C>`, whose coeffic
 elements and whose variable is a scalar, a case `Polynomial R` does not describe. -/
 def evalCoeffs (d : ℕ) (c : ℕ → V) : R → V := fun x ↦ ∑ k ∈ range (d + 1), x ^ k • c k
 
-/-- Δ_h^n (y ↦ p(y)·v) = (y ↦ (Δ_h^n p)(y)·v) -/
+/-- For a fixed v, differencing y ↦ p(y)·v n times gives y ↦ (Δ_h^n p)(y)·v. -/
 theorem fwdDiff_iter_smul_const (n : ℕ) (h : R) (p : R → R) (v : V) :
     Δ_[h]^[n] (fun y ↦ p y • v) = fun y ↦ (Δ_[h]^[n] p y) • v := by
   induction n generalizing p with
