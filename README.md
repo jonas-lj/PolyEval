@@ -48,6 +48,11 @@ multiplications of Horner's rule.
   `d + 1` differences. Being a polynomial is used nowhere else, so each flavour of polynomial only
   has to supply that one hypothesis.
 
+* `PolyEval.stepSeq_iterate_diffPassesSeq_zero` — the same again for the loops as an implementation
+  runs them, writing one entry at a time rather than rewriting the array at once. The visit order of
+  each loop is part of the definition, so the proof covers the read-before-write reasoning that the
+  in-place updates rely on.
+
 * `PolyEval.step_iterate_diffPasses_zero_evalCoeffs` — the flavour whose coefficients live in a
   module `V` over `R` while the variable runs over `R`:
 
@@ -75,11 +80,17 @@ Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbe
 | `evalCoeffs d c` | the coefficients of [`Poly<C>`][poly], summed by [`eval`][eval] |
 | `d` | [`degree`][degree], the index of the last non-zero coefficient |
 | the values at the first `d + 1` points | [`new`][new] |
-| `diffPasses d` | [`compute_state`][compute_state] |
+| `diffPassesSeq d d` | [`compute_state`][compute_state] |
 | `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |
-| `step` | [`iterate_state`][iterate_state] |
-| `step^[i] ... 0` | [`next`][next], which skips the update on the first call |
-| `step_iterate_diffPasses_zero_evalCoeffs` | [`eval_range`][eval_range_pinned] |
+| `stepSeq d` | [`iterate_state`][iterate_state] |
+| `(stepSeq d)^[i] ... 0` | [`next`][next], which skips the update on the first call |
+| `stepSeq_iterate_diffPassesSeq_zero_evalCoeffs` | [`eval_range`][eval_range_pinned] |
+
+`stepSeq` and `diffPassesSeq` write one entry at a time, in the order the loops visit them, and
+`PolyEval.truncate_stepSeq` and `PolyEval.truncate_diffPassesSeq` prove that each agrees with the
+all-at-once update it implements. This is what pins the loop directions down. The update loop reads
+the entry above the one it writes, so it has to run upwards, and a differencing pass reads the entry
+below, so it has to run downwards. Reversing either would read an entry it had already overwritten.
 
 Four details of the correspondence are worth stating, since the theorem does not see them.
 
@@ -95,8 +106,7 @@ Four details of the correspondence are worth stating, since the theorem does not
 
 What the alignment still rests on, and Lean does not check: that Horner's rule in [`eval`][eval]
 computes the polynomial, that a `Vec` of `d + 1` entries behaves like a function that is zero above
-`d`, that each in-place loop equals the all-at-once update its visit order implies, and that a
-`ShareIndex` converts to a scalar compatibly with the arithmetic on indices.
+`d`, and that a `ShareIndex` converts to a scalar compatibly with the arithmetic on indices.
 
 [eval_range]: https://github.com/MystenLabs/fastcrypto/blob/main/fastcrypto-tbls/src/polynomial.rs
 [poly]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L26
