@@ -300,13 +300,6 @@ theorem fwdDiff_iter_eval_eq_zero {P : R[X]} {n : ℕ} (hP : P.natDegree < n) (h
     funext s; simp, Polynomial.fwdDiff_iter_eq_zero_of_degree_lt hdeg] at key
   simpa using key.symm
 
-/-- Correctness of the algorithm, for a polynomial over a commutative ring. -/
-theorem iterateState_iterate_computeState_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d)
-    (h x : R) (i : ℕ) :
-    (iterateState d)^[i] (computeState d fun j ↦ P.eval (x + j * h)) 0 = P.eval (x + i * h) := by
-  simpa [nsmul_eq_mul] using
-    iterateState_iterate_computeState_zero (fwdDiff_iter_eval_eq_zero (by omega) h) x i
-
 end Eval
 
 section Coeffs
@@ -347,7 +340,8 @@ theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V)
   funext x
   simp
 
-/-- Correctness of the algorithm, for a polynomial over a commutative ring. -/
+/-- Correctness of the algorithm. A polynomial over a commutative ring is the case `V = R`, via
+`P.eval y = evalCoeffs d P.coeff y` for `P.natDegree ≤ d`. -/
 theorem iterateState_iterate_computeState_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
       = evalCoeffs d c (x + i * h) := by

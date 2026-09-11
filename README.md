@@ -37,10 +37,8 @@ multiplications of Horner's rule.
   `evalCoeffs d c` has its coefficients in a module `V` over `R` and its variable in `R`, which is
   the shape of `fastcrypto`'s `Poly<C>`. `Polynomial R` does not describe those, since it puts the
   coefficients and the variable in the same ring. A ring is a module over itself, so this also
-  covers `Poly<C::ScalarType>`.
-
-* `PolyEval.iterateState_iterate_computeState_zero_eval` — the same for a `Polynomial R`, whose
-  coefficients and variable share a ring, under the hypothesis `P.natDegree ≤ d`.
+  covers `Poly<C::ScalarType>`, and a `Polynomial R` reduces to it by rewriting `P.eval` as
+  `evalCoeffs d P.coeff`, which holds when `P.natDegree ≤ d`.
 
 * `PolyEval.iterateState_iterate_computeState_zero` — the same for an arbitrary `f` killed by
   `d + 1` differences. Being a polynomial is used nowhere else, so each flavour above only has to supply
