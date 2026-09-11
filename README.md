@@ -20,12 +20,12 @@ multiplications of Horner's rule.
 
 ## Main results
 
-* `PolyEval.stepSeq_iterate_diffPassesSeq_zero_evalCoeffs` — correctness of the algorithm as an
+* `PolyEval.iterateState_iterate_computeState_zero_evalCoeffs` — correctness of the algorithm as an
   implementation runs it:
 
   ```lean
-  theorem stepSeq_iterate_diffPassesSeq_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-      (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ evalCoeffs d c (x + j * h)) 0
+  theorem iterateState_iterate_computeState_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
+      (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
         = evalCoeffs d c (x + i * h)
   ```
 
@@ -39,14 +39,14 @@ multiplications of Horner's rule.
   coefficients and the variable in the same ring. A ring is a module over itself, so this also
   covers `Poly<C::ScalarType>`.
 
-* `PolyEval.stepSeq_iterate_diffPassesSeq_zero_eval` — the same for a `Polynomial R`, whose
+* `PolyEval.iterateState_iterate_computeState_zero_eval` — the same for a `Polynomial R`, whose
   coefficients and variable share a ring, under the hypothesis `P.natDegree ≤ d`.
 
-* `PolyEval.stepSeq_iterate_diffPassesSeq_zero` — the same for an arbitrary `f` killed by `d + 1`
-  differences. Being a polynomial is used nowhere else, so each flavour above only has to supply
+* `PolyEval.iterateState_iterate_computeState_zero` — the same for an arbitrary `f` killed by
+  `d + 1` differences. Being a polynomial is used nowhere else, so each flavour above only has to supply
   that one hypothesis.
 
-* `PolyEval.truncate_stepSeq` and `PolyEval.truncate_diffPassesSeq` — each loop, visit order
+* `PolyEval.truncate_iterateState` and `PolyEval.truncate_computeState` — each loop, visit order
   included, agrees with the all-at-once update it implements. These carry the read-before-write
   reasoning that writing one entry at a time relies on.
 
@@ -77,14 +77,15 @@ Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbe
 | `evalCoeffs d c` | the coefficients of [`Poly<C>`][poly], summed by [`eval`][eval] |
 | `d` | [`degree`][degree], the index of the last non-zero coefficient |
 | the values at the first `d + 1` points | [`new`][new] |
-| `diffPassesSeq d d` | [`compute_state`][compute_state] |
+| `computeState d` | [`compute_state`][compute_state] |
 | `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |
-| `stepSeq d` | [`iterate_state`][iterate_state] |
-| `(stepSeq d)^[i] ... 0` | [`next`][next], which skips the update on the first call |
-| `stepSeq_iterate_diffPassesSeq_zero_evalCoeffs` | [`eval_range`][eval_range_pinned] |
+| `iterateState d` | [`iterate_state`][iterate_state] |
+| `(iterateState d)^[i] ... 0` | [`next`][next], which skips the update on the first call |
+| `iterateState_iterate_computeState_zero_evalCoeffs` | [`eval_range`][eval_range_pinned] |
 
-`stepSeq` and `diffPassesSeq` write one entry at a time, in the order the loops visit them, and
-`PolyEval.truncate_stepSeq` and `PolyEval.truncate_diffPassesSeq` prove that each agrees with the
+`iterateState` and `computeState` are named for the Rust functions they model, and they write one
+entry at a time in the order those loops visit them.
+`PolyEval.truncate_iterateState` and `PolyEval.truncate_computeState` prove that each agrees with the
 all-at-once update it implements. This is what pins the loop directions down. The update loop reads
 the entry above the one it writes, so it has to run upwards, and a differencing pass reads the entry
 below, so it has to run downwards. Reversing either would read an entry it had already overwritten.

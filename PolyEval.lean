@@ -5,35 +5,18 @@ import Mathlib.Algebra.Polynomial.Degree.SmallDegree
 /-!
 # Polynomial evaluation on an arithmetic progression
 
-To evaluate a polynomial `P` at `x`, `x + h`, `x + 2h`, ..., keep its forward difference table
-`table h P.eval x`, whose `j`-th entry is
-[`Δ_[h]`](https://leanprover-community.github.io/mathlib4_docs/Mathlib/Algebra/Group/ForwardDiff.html#fwdDiff)`^[j] P.eval x`,
-and repeatedly apply `step`, which replaces every entry `y j` by `y j + y (j + 1)`. The head of the
-table then runs through the values of `P` along the progression, at a cost of `P.natDegree`
+To evaluate a polynomial at `x`, `x + h`, `x + 2h`, ..., keep its forward difference table
+`table h P.eval x`, whose `j`-th entry is `Δ_[h]^[j] P.eval x`, and repeatedly replace every entry
+`y j` by `y j + y (j + 1)`. The head runs through the values of `P`, at a cost of `P.natDegree`
 additions and no multiplications per point.
 
-`step_iterate_zero` proves this for an arbitrary function, and `table_eq_zero_of_lt` shows that for
-a polynomial of degree at most `d` the table vanishes above entry `d`, so `d + 1` entries suffice.
+`iterateState_iterate_computeState_zero_evalCoeffs` is the whole algorithm, initialisation
+included, as `Poly::eval_range` in `fastcrypto-tbls` runs it. Mind one clash of vocabulary: here
+`step` is the update applied to the array and `h` is the spacing of the progression, while
+`fastcrypto` calls that spacing `step`.
 
-An implementation starts from the values of `P` at the first `d + 1` points of the progression and
-turns them into the table by repeated differencing, `y j ← y j - y (j - 1)`. `diffPasses` is that
-initialisation and `truncate_diffPasses_eval` proves it builds `table`, so
-`step_iterate_diffPasses_zero_eval` states correctness of the whole algorithm, initialisation
-included, on an array of length `d + 1`.
-
-`step` and `diffPasses` rewrite the whole array at once, while an implementation writes one entry
-at a time. `stepSeq` and `diffPassesSeq` are the loops with their visit orders, and
-`stepSeq_iterate_diffPassesSeq_zero` is the same correctness statement about them.
-
-The algorithm uses one property of `P` and nothing else: `d + 1` differences annihilate it. So
-`truncate_diffPasses` and `step_iterate_diffPasses_zero` assume just `Δ_[h]^[d + 1] f = 0`, for an
-arbitrary `f`. `step_iterate_diffPasses_zero_evalCoeffs` is the second flavour they cover, with
-coefficients in a module over `R` and the variable in `R`. That is what `fastcrypto` evaluates when
-the coefficients are group elements.
-
-The algorithm is Knuth's, *The Art of Computer Programming*, Volume 2, section 4.6.4, where the
-initialisation is exercise 7. It is also described at <https://www.jonaslindstrom.dk/?p=1306>. The
-implementation these results are stated against is `Poly::eval_range` in `fastcrypto-tbls`,
+Knuth, *The Art of Computer Programming*, Volume 2, section 4.6.4, with the initialisation in
+exercise 7. See also <https://www.jonaslindstrom.dk/?p=1306> and
 <https://github.com/MystenLabs/fastcrypto/blob/main/fastcrypto-tbls/src/polynomial.rs>.
 -/
 
@@ -153,19 +136,19 @@ writes, so it must run upwards, and a differencing pass reads the entry below, s
 downwards. Reversing either makes it read an entry it has already overwritten.
 -/
 
-/-- The update loop `y j ← y j + y (j + 1)`, run for `j = 0, 1, ..., k - 1` in that order, one
-entry at a time. -/
-def stepSeq : ℕ → (ℕ → G) → (ℕ → G)
+/-- `fastcrypto`'s `iterate_state`: the update loop `y j ← y j + y (j + 1)`, run for
+`j = 0, 1, ..., k - 1` in that order, one entry at a time. -/
+def iterateState : ℕ → (ℕ → G) → (ℕ → G)
   | 0, y => y
-  | k + 1, y => Function.update (stepSeq k y) k (stepSeq k y k + stepSeq k y (k + 1))
+  | k + 1, y => Function.update (iterateState k y) k (iterateState k y k + iterateState k y (k + 1))
 
 /-- Running the loop upwards leaves every read untouched, so it adds the original `y (j + 1)`. -/
-theorem stepSeq_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
-    stepSeq k y j = if j < k then y j + y (j + 1) else y j := by
+theorem iterateState_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
+    iterateState k y j = if j < k then y j + y (j + 1) else y j := by
   induction k generalizing j with
-  | zero => simp [stepSeq]
+  | zero => simp [iterateState]
   | succ k ih =>
-      rw [stepSeq, Function.update_apply]
+      rw [iterateState, Function.update_apply]
       by_cases hj : j = k
       · subst hj
         rw [if_pos rfl, ih, ih]
@@ -176,10 +159,10 @@ theorem stepSeq_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
         · rw [if_neg hjk, if_neg (by omega : ¬ j < k + 1)]
 
 /-- On an array of `d + 1` entries, the update loop is `step`. -/
-theorem truncate_stepSeq (d : ℕ) (y : ℕ → G) :
-    truncate d (stepSeq d y) = step (truncate d y) := by
+theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
+    truncate d (iterateState d y) = step (truncate d y) := by
   funext j
-  simp only [truncate, step, stepSeq_apply]
+  simp only [truncate, step, iterateState_apply]
   by_cases hj : j < d
   · rw [if_pos (by omega : j ≤ d), if_pos hj, if_pos (by omega : j ≤ d),
       if_pos (by omega : j + 1 ≤ d)]
@@ -188,11 +171,11 @@ theorem truncate_stepSeq (d : ℕ) (y : ℕ → G) :
     · rw [if_neg hjd, if_neg hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
 
 /-- `i` runs of the update loop are `i` applications of `step`. -/
-theorem truncate_stepSeq_iterate (d i : ℕ) (y : ℕ → G) :
-    truncate d ((stepSeq d)^[i] y) = step^[i] (truncate d y) := by
+theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
+    truncate d ((iterateState d)^[i] y) = step^[i] (truncate d y) := by
   induction i generalizing y with
   | zero => simp
-  | succ i ih => rw [iterate_succ_apply, iterate_succ_apply, ih, truncate_stepSeq]
+  | succ i ih => rw [iterate_succ_apply, iterate_succ_apply, ih, truncate_iterateState]
 
 /-- One differencing pass `y j ← y j - y (j - 1)`, run for `j = top, top - 1, ..., k` in that
 order, one entry at a time. -/
@@ -254,8 +237,8 @@ theorem truncate_diffPass_congr {d k : ℕ} {A B : ℕ → G} (hAB : truncate d 
       eq_of_truncate_eq hAB (by omega : j - 1 ≤ d)]
   · rw [if_neg hj, if_neg hj]
 
-/-- The initialisation as an implementation runs it: the passes `1, ..., k`, each writing the
-entries `top`, `top - 1`, ..., down to the number of the pass. -/
+/-- The passes `1, ..., k` of the initialisation, each writing the entries `top`, `top - 1`, ...,
+down to the number of the pass. `computeState` is the loop as `fastcrypto` runs it. -/
 def diffPassesSeq (top : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
   | 0, y => y
   | k + 1, y => diffPassSeq (k + 1) top (diffPassesSeq top k y)
@@ -269,14 +252,23 @@ theorem truncate_diffPassesSeq (d k : ℕ) (y : ℕ → G) :
       rw [diffPassesSeq, diffPasses, truncate_diffPassSeq (by omega)]
       exact truncate_diffPass_congr ih
 
+/-- The initialisation as a whole, `fastcrypto`'s `compute_state`: all `d` passes over an array of
+`d + 1` entries. -/
+def computeState (d : ℕ) (y : ℕ → G) : ℕ → G := diffPassesSeq d d y
+
+/-- On an array of `d + 1` entries, the initialisation is `diffPasses`. -/
+theorem truncate_computeState (d : ℕ) (y : ℕ → G) :
+    truncate d (computeState d y) = truncate d (diffPasses d y) :=
+  truncate_diffPassesSeq d d y
+
 /-- Correctness of the algorithm as the loops actually run it, one entry at a time. -/
-theorem stepSeq_iterate_diffPassesSeq_zero {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0)
-    (x : M) (i : ℕ) :
-    (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
-  have h0 : ∀ z : ℕ → G, (stepSeq d)^[i] z 0 = step^[i] (truncate d z) 0 := fun z ↦ by
-    rw [← truncate_stepSeq_iterate]
+theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
+    (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
+    (iterateState d)^[i] (computeState d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
+  have h0 : ∀ z : ℕ → G, (iterateState d)^[i] z 0 = step^[i] (truncate d z) 0 := fun z ↦ by
+    rw [← truncate_iterateState_iterate]
     simp [truncate]
-  rw [h0, truncate_diffPassesSeq]
+  rw [h0, truncate_computeState]
   exact step_iterate_diffPasses_zero hf x i
 
 section Eval
@@ -342,13 +334,13 @@ theorem step_iterate_diffPasses_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree
   rw [truncate_diffPasses_eval hP, step_iterate_zero_eval]
 
 /-- The same, for the loops as an implementation runs them. -/
-theorem stepSeq_iterate_diffPassesSeq_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d)
+theorem iterateState_iterate_computeState_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d)
     (h x : R) (i : ℕ) :
-    (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ P.eval (x + j * h)) 0 = P.eval (x + i * h) := by
+    (iterateState d)^[i] (computeState d fun j ↦ P.eval (x + j * h)) 0 = P.eval (x + i * h) := by
   rw [show (fun j : ℕ ↦ P.eval (x + j * h)) = fun j : ℕ ↦ P.eval (x + j • h) from by
     simp [nsmul_eq_mul]]
   simpa [nsmul_eq_mul] using
-    stepSeq_iterate_diffPassesSeq_zero (fwdDiff_iter_eval_eq_zero (by omega) h) x i
+    iterateState_iterate_computeState_zero (fwdDiff_iter_eval_eq_zero (by omega) h) x i
 
 end Eval
 
@@ -407,13 +399,13 @@ theorem step_iterate_diffPasses_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x :
   exact step_iterate_zero h (evalCoeffs d c) x i
 
 /-- The same, for the loops as an implementation runs them. -/
-theorem stepSeq_iterate_diffPassesSeq_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-    (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ evalCoeffs d c (x + j * h)) 0
+theorem iterateState_iterate_computeState_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
+    (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
       = evalCoeffs d c (x + i * h) := by
   rw [show (fun j : ℕ ↦ evalCoeffs d c (x + j * h)) = fun j : ℕ ↦ evalCoeffs d c (x + j • h) from by
     simp [nsmul_eq_mul]]
   have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
-  simpa [nsmul_eq_mul] using stepSeq_iterate_diffPassesSeq_zero hf x i
+  simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
 end Coeffs
 
