@@ -50,10 +50,9 @@ multiplications of Horner's rule.
   included, agrees with the all-at-once update it implements. These carry the read-before-write
   reasoning that writing one entry at a time relies on.
 
-* `PolyEval.step_iterate_diffPasses_zero` and its two flavours — the same correctness statement one
-  layer down, about `step` and `diffPasses`, which rewrite the whole array at once.
-  `PolyEval.truncate_diffPasses` is the step identifying the initialised array with the difference
-  table.
+* `PolyEval.step_iterate_diffPasses_zero` — the same correctness statement one layer down, about
+  `step` and `diffPasses`, which rewrite the whole array at once. `PolyEval.truncate_diffPasses` is
+  the step identifying the initialised array with the difference table.
 
 * `PolyEval.step_iterate_zero` — the heart of it, for an arbitrary function and an untruncated
   table:
@@ -65,8 +64,8 @@ multiplications of Horner's rule.
 
 * `PolyEval.fwdDiff_iter_eval_eq_zero` — `Δ_[h]^[n] P.eval = 0` when `P.natDegree < n`. Mathlib has
   this only for step size `1` (`Polynomial.fwdDiff_iter_eq_zero_of_degree_lt`); this generalises it
-  to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the module-valued counterpart,
-  and `PolyEval.table_eq_zero_of_lt` is what makes `d + 1` entries enough.
+  to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the module-valued
+  counterpart, and it is what makes `d + 1` entries enough.
 
 ## The implementation
 

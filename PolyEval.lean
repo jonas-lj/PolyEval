@@ -1,6 +1,5 @@
 import Mathlib.Algebra.Group.ForwardDiff
 import Mathlib.Algebra.Polynomial.Degree.Lemmas
-import Mathlib.Algebra.Polynomial.Degree.SmallDegree
 
 /-!
 # Polynomial evaluation on an arithmetic progression
@@ -301,39 +300,10 @@ theorem fwdDiff_iter_eval_eq_zero {P : R[X]} {n : ℕ} (hP : P.natDegree < n) (h
     funext s; simp, Polynomial.fwdDiff_iter_eq_zero_of_degree_lt hdeg] at key
   simpa using key.symm
 
-/-- `P.natDegree ≤ d ⇒ d < j ⇒ table h P.eval x j = 0` -/
-theorem table_eq_zero_of_lt {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R) {j : ℕ}
-    (hj : d < j) : table h P.eval x j = 0 := by
-  simp [table, fwdDiff_iter_eval_eq_zero (lt_of_le_of_lt hP hj) h]
-
-/-- `step^[i] (table h P.eval x) 0 = P.eval (x + i * h)` -/
-theorem step_iterate_zero_eval (P : R[X]) (h x : R) (i : ℕ) :
-    step^[i] (table h P.eval x) 0 = P.eval (x + i * h) := by
-  simpa [nsmul_eq_mul] using step_iterate_zero h P.eval x i
-
-/-- The initialisation is correct. For `P` of degree at most `d`, running the differencing passes
-on the values of `P` at the first `d + 1` points of the progression, and reading the result as a
-length-`d + 1` array, gives exactly `table h P.eval x`. -/
-theorem truncate_diffPasses_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R) :
-    truncate d (diffPasses d fun i ↦ P.eval (x + i * h)) = table h P.eval x := by
-  rw [show (fun i : ℕ ↦ P.eval (x + i * h)) = fun i : ℕ ↦ P.eval (x + i • h) from by
-    simp [nsmul_eq_mul]]
-  exact truncate_diffPasses (fwdDiff_iter_eval_eq_zero (by omega) h) x
-
-/-- Correctness of the algorithm as implemented on a length-`d + 1` array: initialise it with the
-values of `P` at the first `d + 1` points, run the differencing passes, then step `i` times. The
-head of the array then holds `P.eval (x + i * h)`. -/
-theorem step_iterate_diffPasses_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
-    (i : ℕ) :
-    step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h) := by
-  rw [truncate_diffPasses_eval hP, step_iterate_zero_eval]
-
-/-- The same, for the loops as an implementation runs them. -/
+/-- Correctness of the algorithm, for a polynomial over a commutative ring. -/
 theorem iterateState_iterate_computeState_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d)
     (h x : R) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ P.eval (x + j * h)) 0 = P.eval (x + i * h) := by
-  rw [show (fun j : ℕ ↦ P.eval (x + j * h)) = fun j : ℕ ↦ P.eval (x + j • h) from by
-    simp [nsmul_eq_mul]]
   simpa [nsmul_eq_mul] using
     iterateState_iterate_computeState_zero (fwdDiff_iter_eval_eq_zero (by omega) h) x i
 
@@ -377,28 +347,10 @@ theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V)
   funext x
   simp
 
-/-- `truncate d (diffPasses d (values of `evalCoeffs d c`)) = table h (evalCoeffs d c) x` -/
-theorem truncate_diffPasses_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) :
-    truncate d (diffPasses d fun i ↦ evalCoeffs d c (x + i * h)) = table h (evalCoeffs d c) x := by
-  rw [show (fun i : ℕ ↦ evalCoeffs d c (x + i * h)) = fun i : ℕ ↦ evalCoeffs d c (x + i • h) from by
-    simp [nsmul_eq_mul]]
-  exact truncate_diffPasses (fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h) x
-
-/-- Correctness of the algorithm on a length-`d + 1` array of module-valued coefficients:
-initialise it with the values of the polynomial at the first `d + 1` points, run the differencing
-passes, then step `i` times. The head of the array then holds the value at the `i`-th point. -/
-theorem step_iterate_diffPasses_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-    step^[i] (truncate d (diffPasses d fun j ↦ evalCoeffs d c (x + j * h))) 0
-      = evalCoeffs d c (x + i * h) := by
-  rw [truncate_diffPasses_evalCoeffs, ← nsmul_eq_mul]
-  exact step_iterate_zero h (evalCoeffs d c) x i
-
-/-- The same, for the loops as an implementation runs them. -/
+/-- Correctness of the algorithm, for a polynomial over a commutative ring. -/
 theorem iterateState_iterate_computeState_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
       = evalCoeffs d c (x + i * h) := by
-  rw [show (fun j : ℕ ↦ evalCoeffs d c (x + j * h)) = fun j : ℕ ↦ evalCoeffs d c (x + j • h) from by
-    simp [nsmul_eq_mul]]
   have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
   simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
