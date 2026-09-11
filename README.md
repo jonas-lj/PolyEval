@@ -20,56 +20,53 @@ multiplications of Horner's rule.
 
 ## Main results
 
-* `PolyEval.step_iterate_zero` — the algorithm is correct for an arbitrary function:
+* `PolyEval.stepSeq_iterate_diffPassesSeq_zero_evalCoeffs` — correctness of the algorithm as an
+  implementation runs it:
+
+  ```lean
+  theorem stepSeq_iterate_diffPassesSeq_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
+      (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ evalCoeffs d c (x + j * h)) 0
+        = evalCoeffs d c (x + i * h)
+  ```
+
+  Read the left-hand side inside out, which is also the order things happen: the values of the
+  polynomial at the first `d + 1` points, the initialisation loops, `i` runs of the update loop,
+  then the head of the array. Each loop carries its visit order, so it lines up with the code
+  statement by statement.
+
+  `evalCoeffs d c` has its coefficients in a module `V` over `R` and its variable in `R`, which is
+  the shape of `fastcrypto`'s `Poly<C>`. `Polynomial R` does not describe those, since it puts the
+  coefficients and the variable in the same ring. A ring is a module over itself, so this also
+  covers `Poly<C::ScalarType>`.
+
+* `PolyEval.stepSeq_iterate_diffPassesSeq_zero_eval` — the same for a `Polynomial R`, whose
+  coefficients and variable share a ring, under the hypothesis `P.natDegree ≤ d`.
+
+* `PolyEval.stepSeq_iterate_diffPassesSeq_zero` — the same for an arbitrary `f` killed by `d + 1`
+  differences. Being a polynomial is used nowhere else, so each flavour above only has to supply
+  that one hypothesis.
+
+* `PolyEval.truncate_stepSeq` and `PolyEval.truncate_diffPassesSeq` — each loop, visit order
+  included, agrees with the all-at-once update it implements. These carry the read-before-write
+  reasoning that writing one entry at a time relies on.
+
+* `PolyEval.step_iterate_diffPasses_zero` and its two flavours — the same correctness statement one
+  layer down, about `step` and `diffPasses`, which rewrite the whole array at once.
+  `PolyEval.truncate_diffPasses` is the step identifying the initialised array with the difference
+  table.
+
+* `PolyEval.step_iterate_zero` — the heart of it, for an arbitrary function and an untruncated
+  table:
 
   ```lean
   theorem step_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
       step^[i] (table h f x) 0 = f (x + i • h)
   ```
 
-* `PolyEval.table_eq_zero_of_lt` — for a polynomial of degree at most `d` the table vanishes above
-  entry `d`, so `d + 1` entries suffice and the algorithm is finite.
-
-* `PolyEval.step_iterate_diffPasses_zero_eval` — correctness of the whole algorithm on an array of
-  length `d + 1`, initialisation included:
-
-  ```lean
-  theorem step_iterate_diffPasses_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d) (h x : R)
-      (i : ℕ) :
-      step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h)
-  ```
-
-  Here `diffPasses d` is the differencing triangle `y j ← y j - y (j - 1)` that an implementation
-  runs on the values of `P` at the first `d + 1` points, and `truncate d` reads the result as a
-  length-`d + 1` array. `PolyEval.truncate_diffPasses_eval` is the step that identifies it with the
-  difference table.
-
-* `PolyEval.step_iterate_diffPasses_zero` — the same statement for an arbitrary `f` killed by
-  `d + 1` differences. Being a polynomial is used nowhere else, so each flavour of polynomial only
-  has to supply that one hypothesis.
-
-* `PolyEval.stepSeq_iterate_diffPassesSeq_zero` — the same again for the loops as an implementation
-  runs them, writing one entry at a time rather than rewriting the array at once. The visit order of
-  each loop is part of the definition, so the proof covers the read-before-write reasoning that the
-  in-place updates rely on.
-
-* `PolyEval.step_iterate_diffPasses_zero_evalCoeffs` — the flavour whose coefficients live in a
-  module `V` over `R` while the variable runs over `R`:
-
-  ```lean
-  theorem step_iterate_diffPasses_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-      step^[i] (truncate d (diffPasses d fun j ↦ evalCoeffs d c (x + j * h))) 0
-        = evalCoeffs d c (x + i * h)
-  ```
-
-  This is the shape of `fastcrypto`'s `Poly<C>`, whose coefficients are group elements and whose
-  variable is a scalar. `Polynomial R` does not describe those, since it puts the coefficients and
-  the variable in the same ring. A ring is a module over itself, so this statement also covers
-  `Poly<C::ScalarType>`.
-
 * `PolyEval.fwdDiff_iter_eval_eq_zero` — `Δ_[h]^[n] P.eval = 0` when `P.natDegree < n`. Mathlib has
   this only for step size `1` (`Polynomial.fwdDiff_iter_eq_zero_of_degree_lt`); this generalises it
-  to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the module-valued counterpart.
+  to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the module-valued counterpart,
+  and `PolyEval.table_eq_zero_of_lt` is what makes `d + 1` entries enough.
 
 ## The implementation
 
