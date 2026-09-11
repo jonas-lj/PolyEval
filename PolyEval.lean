@@ -9,10 +9,9 @@ To evaluate a polynomial at `x`, `x + h`, `x + 2h`, ..., keep its forward differ
 `y j` by `y j + y (j + 1)`. The head runs through the values of `P`, at a cost of `P.natDegree`
 additions and no multiplications per point.
 
-`iterateState_iterate_computeState_zero_evalCoeffs` is the whole algorithm, initialisation
-included, as `Poly::eval_range` in `fastcrypto-tbls` runs it. Mind one clash of vocabulary: here
-`step` is the update applied to the array and `h` is the spacing of the progression, while
-`fastcrypto` calls that spacing `step`.
+`eval_range_correct` is the whole algorithm, initialisation included, as `Poly::eval_range` in
+`fastcrypto-tbls` runs it. One call of `next` performs one update, and `h` is the spacing of the
+progression, which `fastcrypto` calls `step`.
 
 Knuth, *The Art of Computer Programming*, Volume 2, section 4.6.4, with the initialisation in
 exercise 7. See also <https://www.jonaslindstrom.dk/?p=1306> and
@@ -28,8 +27,8 @@ variable {M G : Type*} [AddCommMonoid M] [AddCommGroup G]
 /-- The difference table of `f` at `x`: entry `j` is `Δ_[h]^[j] f x`. -/
 def table (h : M) (f : M → G) (x : M) : ℕ → G := fun j ↦ Δ_[h]^[j] f x
 
-/-- One iteration of the algorithm: `y j ← y j + y (j + 1)`, for every `j` at once. -/
-def step (y : ℕ → G) : ℕ → G := fun j ↦ y j + y (j + 1)
+/-- One call of `fastcrypto`'s `next`: `y j ← y j + y (j + 1)`, for every `j` at once. -/
+def next (y : ℕ → G) : ℕ → G := fun j ↦ y j + y (j + 1)
 
 /-- `Δ_[h]^[j] f (x + h) = Δ_[h]^[j] f x + Δ_[h]^[j + 1] f x` -/
 theorem fwdDiff_iter_add_right (h : M) (f : M → G) (x : M) (j : ℕ) :
@@ -37,24 +36,24 @@ theorem fwdDiff_iter_add_right (h : M) (f : M → G) (x : M) (j : ℕ) :
   rw [iterate_succ_apply' (fwdDiff h) j f]
   simp [fwdDiff]
 
-/-- `step (table h f x) = table h f (x + h)` -/
-theorem step_table (h : M) (f : M → G) (x : M) : step (table h f x) = table h f (x + h) := by
+/-- `next (table h f x) = table h f (x + h)` -/
+theorem next_table (h : M) (f : M → G) (x : M) : next (table h f x) = table h f (x + h) := by
   funext j
   exact (fwdDiff_iter_add_right h f x j).symm
 
-/-- `step^[i] (table h f x) = table h f (x + i • h)` -/
-theorem step_iterate (h : M) (f : M → G) (x : M) (i : ℕ) :
-    step^[i] (table h f x) = table h f (x + i • h) := by
+/-- `next^[i] (table h f x) = table h f (x + i • h)` -/
+theorem next_iterate (h : M) (f : M → G) (x : M) (i : ℕ) :
+    next^[i] (table h f x) = table h f (x + i • h) := by
   induction i generalizing x with
   | zero => simp
   | succ i ih =>
-      rw [iterate_succ_apply, step_table, ih, succ_nsmul]
+      rw [iterate_succ_apply, next_table, ih, succ_nsmul]
       abel_nf
 
-/-- `step^[i] (table h f x) 0 = f (x + i • h)` -/
-theorem step_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
-    step^[i] (table h f x) 0 = f (x + i • h) := by
-  rw [step_iterate]
+/-- `next^[i] (table h f x) 0 = f (x + i • h)` -/
+theorem next_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
+    next^[i] (table h f x) 0 = f (x + i • h) := by
+  rw [next_iterate]
   simp [table]
 
 /-- Zero-extension of the length-`d + 1` array `y 0, ..., y d`. -/
@@ -116,14 +115,14 @@ theorem truncate_diffPasses {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1]
 
 /-- Correctness of the algorithm on a length-`d + 1` array, for any `f` killed by `d + 1`
 differences. -/
-theorem step_iterate_diffPasses_zero {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0)
+theorem next_iterate_diffPasses_zero {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0)
     (x : M) (i : ℕ) :
-    step^[i] (truncate d (diffPasses d fun j ↦ f (x + j • h))) 0 = f (x + i • h) := by
-  rw [truncate_diffPasses hf, step_iterate_zero]
+    next^[i] (truncate d (diffPasses d fun j ↦ f (x + j • h))) 0 = f (x + i • h) := by
+  rw [truncate_diffPasses hf, next_iterate_zero]
 
 /-! ### The loops as an implementation runs them
 
-`step` and `diffPass` rewrite the whole array at once, while an implementation writes one entry at
+`next` and `diffPass` rewrite the whole array at once, while an implementation writes one entry at
 a time. The definitions below are those loops, visit order included, and each is proved equal to
 the update it implements. The orders are forced: the update loop reads the entry above the one it
 writes, so it must run upwards, and a differencing pass reads the entry below, so it must run
@@ -152,11 +151,11 @@ theorem iterateState_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
         · rw [if_pos hjk, if_pos (by omega : j < k + 1)]
         · rw [if_neg hjk, if_neg (by omega : ¬ j < k + 1)]
 
-/-- On an array of `d + 1` entries, the update loop is `step`. -/
+/-- On an array of `d + 1` entries, the update loop is `next`. -/
 theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
-    truncate d (iterateState d y) = step (truncate d y) := by
+    truncate d (iterateState d y) = next (truncate d y) := by
   funext j
-  simp only [truncate, step, iterateState_apply]
+  simp only [truncate, next, iterateState_apply]
   by_cases hj : j < d
   · rw [if_pos (by omega : j ≤ d), if_pos hj, if_pos (by omega : j ≤ d),
       if_pos (by omega : j + 1 ≤ d)]
@@ -164,29 +163,29 @@ theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
     · rw [if_pos hjd, if_neg hj, if_pos hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
     · rw [if_neg hjd, if_neg hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
 
-/-- `i` runs of the update loop are `i` applications of `step`. -/
+/-- `i` runs of the update loop are `i` applications of `next`. -/
 theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
-    truncate d ((iterateState d)^[i] y) = step^[i] (truncate d y) := by
+    truncate d ((iterateState d)^[i] y) = next^[i] (truncate d y) := by
   induction i generalizing y with
   | zero => simp
   | succ i ih => rw [iterate_succ_apply, iterate_succ_apply, ih, truncate_iterateState]
 
 /-- One differencing pass `y j ← y j - y (j - 1)`, run for `j = top, top - 1, ..., k` in that
 order, one entry at a time. -/
-def diffPassSeq (k : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
+def computeStatePass (k : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
   | 0, y => y
   | top + 1, y =>
-      if k ≤ top + 1 then diffPassSeq k top (Function.update y (top + 1) (y (top + 1) - y top))
+      if k ≤ top + 1 then computeStatePass k top (Function.update y (top + 1) (y (top + 1) - y top))
       else y
 
 /-- Running a pass downwards leaves every read untouched, so it subtracts the original
 `y (j - 1)`. -/
-theorem diffPassSeq_apply {k : ℕ} (hk : 1 ≤ k) (top : ℕ) (y : ℕ → G) (j : ℕ) :
-    diffPassSeq k top y j = if k ≤ j ∧ j ≤ top then y j - y (j - 1) else y j := by
+theorem computeStatePass_apply {k : ℕ} (hk : 1 ≤ k) (top : ℕ) (y : ℕ → G) (j : ℕ) :
+    computeStatePass k top y j = if k ≤ j ∧ j ≤ top then y j - y (j - 1) else y j := by
   induction top generalizing y j with
-  | zero => rw [diffPassSeq, if_neg (by omega)]
+  | zero => rw [computeStatePass, if_neg (by omega)]
   | succ top ih =>
-      rw [diffPassSeq]
+      rw [computeStatePass]
       by_cases hk' : k ≤ top + 1
       · rw [if_pos hk', ih]
         by_cases hjt : j ≤ top
@@ -203,16 +202,16 @@ theorem diffPassSeq_apply {k : ℕ} (hk : 1 ≤ k) (top : ℕ) (y : ℕ → G) (
               Function.update_of_ne (by omega : j ≠ top + 1)]
       · rw [if_neg hk', if_neg (by omega)]
 
-/-- If two arrays agree on their first `d + 1` entries then they agree entrywise below `d`. -/
+/-- If two arrays agree on their first `d + 1` entries then they agree at every entry up to `d`. -/
 theorem eq_of_truncate_eq {d : ℕ} {A B : ℕ → G} (hAB : truncate d A = truncate d B) {j : ℕ}
     (hj : j ≤ d) : A j = B j := by
   simpa [truncate, hj] using congrFun hAB j
 
 /-- On an array of `d + 1` entries, one differencing pass is `diffPass`. -/
-theorem truncate_diffPassSeq {k : ℕ} (hk : 1 ≤ k) (d : ℕ) (y : ℕ → G) :
-    truncate d (diffPassSeq k d y) = truncate d (diffPass k y) := by
+theorem truncate_computeStatePass {k : ℕ} (hk : 1 ≤ k) (d : ℕ) (y : ℕ → G) :
+    truncate d (computeStatePass k d y) = truncate d (diffPass k y) := by
   funext j
-  simp only [truncate, diffPass, diffPassSeq_apply hk]
+  simp only [truncate, diffPass, computeStatePass_apply hk]
   by_cases hj : j ≤ d
   · rw [if_pos hj, if_pos hj]
     by_cases hkj : k ≤ j
@@ -232,38 +231,38 @@ theorem truncate_diffPass_congr {d k : ℕ} {A B : ℕ → G} (hAB : truncate d 
   · rw [if_neg hj, if_neg hj]
 
 /-- The passes `1, ..., k` of the initialisation, each writing the entries `top`, `top - 1`, ...,
-down to the number of the pass. `computeState` is the loop as `fastcrypto` runs it. -/
-def diffPassesSeq (top : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
+down to the number of the pass. `computeState` runs all of them. -/
+def computeStatePasses (top : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
   | 0, y => y
-  | k + 1, y => diffPassSeq (k + 1) top (diffPassesSeq top k y)
+  | k + 1, y => computeStatePass (k + 1) top (computeStatePasses top k y)
 
 /-- On an array of `d + 1` entries, the initialisation loops are `diffPasses`. -/
-theorem truncate_diffPassesSeq (d k : ℕ) (y : ℕ → G) :
-    truncate d (diffPassesSeq d k y) = truncate d (diffPasses k y) := by
+theorem truncate_computeStatePasses (d k : ℕ) (y : ℕ → G) :
+    truncate d (computeStatePasses d k y) = truncate d (diffPasses k y) := by
   induction k with
   | zero => rfl
   | succ k ih =>
-      rw [diffPassesSeq, diffPasses, truncate_diffPassSeq (by omega)]
+      rw [computeStatePasses, diffPasses, truncate_computeStatePass (by omega)]
       exact truncate_diffPass_congr ih
 
 /-- The initialisation as a whole, `fastcrypto`'s `compute_state`: all `d` passes over an array of
 `d + 1` entries. -/
-def computeState (d : ℕ) (y : ℕ → G) : ℕ → G := diffPassesSeq d d y
+def computeState (d : ℕ) (y : ℕ → G) : ℕ → G := computeStatePasses d d y
 
 /-- On an array of `d + 1` entries, the initialisation is `diffPasses`. -/
 theorem truncate_computeState (d : ℕ) (y : ℕ → G) :
     truncate d (computeState d y) = truncate d (diffPasses d y) :=
-  truncate_diffPassesSeq d d y
+  truncate_computeStatePasses d d y
 
 /-- Correctness of the algorithm as the loops actually run it, one entry at a time. -/
 theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
     (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
-  have h0 : ∀ z : ℕ → G, (iterateState d)^[i] z 0 = step^[i] (truncate d z) 0 := fun z ↦ by
+  have h0 : ∀ z : ℕ → G, (iterateState d)^[i] z 0 = next^[i] (truncate d z) 0 := fun z ↦ by
     rw [← truncate_iterateState_iterate]
     simp [truncate]
   rw [h0, truncate_computeState]
-  exact step_iterate_diffPasses_zero hf x i
+  exact next_iterate_diffPasses_zero hf x i
 
 section Eval
 
@@ -340,9 +339,9 @@ theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V)
   funext x
   simp
 
-/-- Correctness of the algorithm. A polynomial over a commutative ring is the case `V = R`, via
-`P.eval y = evalCoeffs d P.coeff y` for `P.natDegree ≤ d`. -/
-theorem iterateState_iterate_computeState_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
+/-- Correctness of `fastcrypto`'s `Poly::eval_range`. A polynomial over a commutative ring is the
+case `V = R`, via `P.eval y = evalCoeffs d P.coeff y` for `P.natDegree ≤ d`. -/
+theorem eval_range_correct (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
       = evalCoeffs d c (x + i * h) := by
   have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
