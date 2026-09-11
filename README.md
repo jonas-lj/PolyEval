@@ -20,11 +20,10 @@ multiplications of Horner's rule.
 
 ## Main results
 
-* `PolyEval.iterateState_iterate_computeState_zero_evalCoeffs` — correctness of the algorithm as an
-  implementation runs it:
+* `PolyEval.eval_range_correct` — correctness of the algorithm as an implementation runs it:
 
   ```lean
-  theorem iterateState_iterate_computeState_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
+  theorem eval_range_correct (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
       (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
         = evalCoeffs d c (x + i * h)
   ```
@@ -41,23 +40,23 @@ multiplications of Horner's rule.
   `evalCoeffs d P.coeff`, which holds when `P.natDegree ≤ d`.
 
 * `PolyEval.iterateState_iterate_computeState_zero` — the same for an arbitrary `f` killed by
-  `d + 1` differences. Being a polynomial is used nowhere else, so each flavour above only has to supply
-  that one hypothesis.
+  `d + 1` differences. Being a polynomial is used nowhere else, so that one hypothesis is all a
+  polynomial has to supply.
 
 * `PolyEval.truncate_iterateState` and `PolyEval.truncate_computeState` — each loop, visit order
   included, agrees with the all-at-once update it implements. These carry the read-before-write
   reasoning that writing one entry at a time relies on.
 
-* `PolyEval.step_iterate_diffPasses_zero` — the same correctness statement one layer down, about
-  `step` and `diffPasses`, which rewrite the whole array at once. `PolyEval.truncate_diffPasses` is
+* `PolyEval.next_iterate_diffPasses_zero` — the same correctness statement one layer down, about
+  `next` and `diffPasses`, which rewrite the whole array at once. `PolyEval.truncate_diffPasses` is
   the step identifying the initialised array with the difference table.
 
-* `PolyEval.step_iterate_zero` — the heart of it, for an arbitrary function and an untruncated
+* `PolyEval.next_iterate_zero` — the heart of it, for an arbitrary function and an untruncated
   table:
 
   ```lean
-  theorem step_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
-      step^[i] (table h f x) 0 = f (x + i • h)
+  theorem next_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
+      next^[i] (table h f x) 0 = f (x + i • h)
   ```
 
 * `PolyEval.fwdDiff_iter_eval_eq_zero` — `Δ_[h]^[n] P.eval = 0` when `P.natDegree < n`. Mathlib has
@@ -78,14 +77,14 @@ Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbe
 | `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |
 | `iterateState d` | [`iterate_state`][iterate_state] |
 | `(iterateState d)^[i] ... 0` | [`next`][next], which skips the update on the first call |
-| `iterateState_iterate_computeState_zero_evalCoeffs` | [`eval_range`][eval_range_pinned] |
+| `eval_range_correct` | [`eval_range`][eval_range_pinned] |
 
-`iterateState` and `computeState` are named for the Rust functions they model, and they write one
-entry at a time in the order those loops visit them.
-`PolyEval.truncate_iterateState` and `PolyEval.truncate_computeState` prove that each agrees with the
-all-at-once update it implements. This is what pins the loop directions down. The update loop reads
-the entry above the one it writes, so it has to run upwards, and a differencing pass reads the entry
-below, so it has to run downwards. Reversing either would read an entry it had already overwritten.
+`iterateState` and `computeState` are named for the Rust functions they model, and write one entry
+at a time in the order those loops visit them. `PolyEval.truncate_iterateState` and
+`PolyEval.truncate_computeState` prove that each agrees with the all-at-once update it implements.
+This is what pins the loop directions down. The update loop reads the entry above the one it
+writes, so it has to run upwards, and a differencing pass reads the entry below, so it has to run
+downwards. Reversing either would read an entry it had already overwritten.
 
 Four details of the correspondence are worth stating, since the theorem does not see them.
 
