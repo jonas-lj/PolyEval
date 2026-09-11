@@ -59,4 +59,46 @@ additions and `deg P` multiplications of Horner's rule.
   this only for step size `1` (`Polynomial.fwdDiff_iter_eq_zero_of_degree_lt`); this generalises it
   to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the module-valued counterpart.
 
+## The implementation
+
+Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbers move.
+
+| Lean | fastcrypto |
+| --- | --- |
+| `evalCoeffs d c` | the coefficients of [`Poly<C>`][poly], summed by [`eval`][eval] |
+| `d` | [`degree`][degree], the index of the last non-zero coefficient |
+| the values at the first `d + 1` points | [`new`][new] |
+| `diffPasses d` | [`compute_state`][compute_state] |
+| `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |
+| `step` | [`iterate_state`][iterate_state] |
+| `step^[i] ... 0` | [`next`][next], which skips the update on the first call |
+| `step_iterate_diffPasses_zero_evalCoeffs` | [`eval_range`][eval_range_pinned] |
+
+Four details of the correspondence are worth stating, since the theorem does not see them.
+
+* The array is `degree() + 1` long rather than one per coefficient. Dropping zero leading
+  coefficients leaves the function unchanged, so the degree hypothesis still holds.
+* [`simple_from_evaluations`][simple_from_evaluations] runs one extra update before its first
+  yield and labels it index 1. The same theorem covers it, started at 0, with output `i` reached
+  after `i + 1` updates.
+* Index arithmetic is checked and the iterator ends rather than wrapping, so the points really are
+  the arithmetic progression.
+* [`eval_range`][eval_range] evaluates directly when `m` is 0 or `u16::MAX`, or when the degree is
+  at least `u16::MAX`. Those branches never reach the algorithm.
+
+What the alignment still rests on, and Lean does not check: that Horner's rule in [`eval`][eval]
+computes the polynomial, that a `Vec` of `d + 1` entries behaves like a function that is zero above
+`d`, that each in-place loop equals the all-at-once update its visit order implies, and that a
+`ShareIndex` converts to a scalar compatibly with the arithmetic on indices.
+
 [eval_range]: https://github.com/MystenLabs/fastcrypto/blob/main/fastcrypto-tbls/src/polynomial.rs
+[poly]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L26
+[degree]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L45-L47
+[eval]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L137-L150
+[eval_range_pinned]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L157-L179
+[evaluator]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L642-L647
+[new]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L653-L673
+[simple_from_evaluations]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L676-L688
+[compute_state]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L690-L698
+[iterate_state]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L700-L704
+[next]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L710-L721
