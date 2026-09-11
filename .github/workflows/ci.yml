@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          # fail if anything under PolyEval rests on sorry, native_decide,
+          # or any axiom beyond propext, Classical.choice and Quot.sound
+          axiom-audit: "true"
