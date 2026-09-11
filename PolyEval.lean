@@ -21,6 +21,10 @@ initialisation and `truncate_diffPasses_eval` proves it builds `table`, so
 `step_iterate_diffPasses_zero_eval` states correctness of the whole algorithm, initialisation
 included, on an array of length `d + 1`.
 
+`step` and `diffPasses` rewrite the whole array at once, while an implementation writes one entry
+at a time. `stepSeq` and `diffPassesSeq` are the loops with their visit orders, and
+`stepSeq_iterate_diffPassesSeq_zero` is the same correctness statement about them.
+
 The algorithm uses one property of `P` and nothing else: `d + 1` differences annihilate it. So
 `truncate_diffPasses` and `step_iterate_diffPasses_zero` assume just `Δ_[h]^[d + 1] f = 0`, for an
 arbitrary `f`. `step_iterate_diffPasses_zero_evalCoeffs` is the second flavour they cover, with
@@ -140,6 +144,141 @@ theorem step_iterate_diffPasses_zero {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h
     step^[i] (truncate d (diffPasses d fun j ↦ f (x + j • h))) 0 = f (x + i • h) := by
   rw [truncate_diffPasses hf, step_iterate_zero]
 
+/-! ### The loops as an implementation runs them
+
+`step` and `diffPass` rewrite the whole array at once, while an implementation writes one entry at
+a time. The definitions below are those loops, visit order included, and each is proved equal to
+the update it implements. The orders are forced: the update loop reads the entry above the one it
+writes, so it must run upwards, and a differencing pass reads the entry below, so it must run
+downwards. Reversing either makes it read an entry it has already overwritten.
+-/
+
+/-- The update loop `y j ← y j + y (j + 1)`, run for `j = 0, 1, ..., k - 1` in that order, one
+entry at a time. -/
+def stepSeq : ℕ → (ℕ → G) → (ℕ → G)
+  | 0, y => y
+  | k + 1, y => Function.update (stepSeq k y) k (stepSeq k y k + stepSeq k y (k + 1))
+
+/-- Running the loop upwards leaves every read untouched, so it adds the original `y (j + 1)`. -/
+theorem stepSeq_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
+    stepSeq k y j = if j < k then y j + y (j + 1) else y j := by
+  induction k generalizing j with
+  | zero => simp [stepSeq]
+  | succ k ih =>
+      rw [stepSeq, Function.update_apply]
+      by_cases hj : j = k
+      · subst hj
+        rw [if_pos rfl, ih, ih]
+        simp
+      · rw [if_neg hj, ih]
+        by_cases hjk : j < k
+        · rw [if_pos hjk, if_pos (by omega : j < k + 1)]
+        · rw [if_neg hjk, if_neg (by omega : ¬ j < k + 1)]
+
+/-- On an array of `d + 1` entries, the update loop is `step`. -/
+theorem truncate_stepSeq (d : ℕ) (y : ℕ → G) :
+    truncate d (stepSeq d y) = step (truncate d y) := by
+  funext j
+  simp only [truncate, step, stepSeq_apply]
+  by_cases hj : j < d
+  · rw [if_pos (by omega : j ≤ d), if_pos hj, if_pos (by omega : j ≤ d),
+      if_pos (by omega : j + 1 ≤ d)]
+  · by_cases hjd : j ≤ d
+    · rw [if_pos hjd, if_neg hj, if_pos hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
+    · rw [if_neg hjd, if_neg hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
+
+/-- `i` runs of the update loop are `i` applications of `step`. -/
+theorem truncate_stepSeq_iterate (d i : ℕ) (y : ℕ → G) :
+    truncate d ((stepSeq d)^[i] y) = step^[i] (truncate d y) := by
+  induction i generalizing y with
+  | zero => simp
+  | succ i ih => rw [iterate_succ_apply, iterate_succ_apply, ih, truncate_stepSeq]
+
+/-- One differencing pass `y j ← y j - y (j - 1)`, run for `j = top, top - 1, ..., k` in that
+order, one entry at a time. -/
+def diffPassSeq (k : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
+  | 0, y => y
+  | top + 1, y =>
+      if k ≤ top + 1 then diffPassSeq k top (Function.update y (top + 1) (y (top + 1) - y top))
+      else y
+
+/-- Running a pass downwards leaves every read untouched, so it subtracts the original
+`y (j - 1)`. -/
+theorem diffPassSeq_apply {k : ℕ} (hk : 1 ≤ k) (top : ℕ) (y : ℕ → G) (j : ℕ) :
+    diffPassSeq k top y j = if k ≤ j ∧ j ≤ top then y j - y (j - 1) else y j := by
+  induction top generalizing y j with
+  | zero => rw [diffPassSeq, if_neg (by omega)]
+  | succ top ih =>
+      rw [diffPassSeq]
+      by_cases hk' : k ≤ top + 1
+      · rw [if_pos hk', ih]
+        by_cases hjt : j ≤ top
+        · rw [Function.update_of_ne (by omega : j ≠ top + 1),
+            Function.update_of_ne (by omega : j - 1 ≠ top + 1)]
+          by_cases hkj : k ≤ j
+          · rw [if_pos ⟨hkj, hjt⟩, if_pos ⟨hkj, by omega⟩]
+          · rw [if_neg (by tauto), if_neg (by tauto)]
+        · by_cases hjt' : j = top + 1
+          · subst hjt'
+            rw [if_neg (by omega), if_pos ⟨hk', le_refl _⟩, Function.update_self]
+            simp
+          · rw [if_neg (by omega), if_neg (by omega),
+              Function.update_of_ne (by omega : j ≠ top + 1)]
+      · rw [if_neg hk', if_neg (by omega)]
+
+/-- If two arrays agree on their first `d + 1` entries then they agree entrywise below `d`. -/
+theorem eq_of_truncate_eq {d : ℕ} {A B : ℕ → G} (hAB : truncate d A = truncate d B) {j : ℕ}
+    (hj : j ≤ d) : A j = B j := by
+  simpa [truncate, hj] using congrFun hAB j
+
+/-- On an array of `d + 1` entries, one differencing pass is `diffPass`. -/
+theorem truncate_diffPassSeq {k : ℕ} (hk : 1 ≤ k) (d : ℕ) (y : ℕ → G) :
+    truncate d (diffPassSeq k d y) = truncate d (diffPass k y) := by
+  funext j
+  simp only [truncate, diffPass, diffPassSeq_apply hk]
+  by_cases hj : j ≤ d
+  · rw [if_pos hj, if_pos hj]
+    by_cases hkj : k ≤ j
+    · rw [if_pos ⟨hkj, hj⟩, if_pos hkj]
+    · rw [if_neg (by tauto), if_neg hkj]
+  · rw [if_neg hj, if_neg hj]
+
+/-- A pass only reads entries at or below the one it writes, so it respects agreement on the first
+`d + 1` entries. -/
+theorem truncate_diffPass_congr {d k : ℕ} {A B : ℕ → G} (hAB : truncate d A = truncate d B) :
+    truncate d (diffPass k A) = truncate d (diffPass k B) := by
+  funext j
+  simp only [truncate, diffPass]
+  by_cases hj : j ≤ d
+  · rw [if_pos hj, if_pos hj, eq_of_truncate_eq hAB hj,
+      eq_of_truncate_eq hAB (by omega : j - 1 ≤ d)]
+  · rw [if_neg hj, if_neg hj]
+
+/-- The initialisation as an implementation runs it: the passes `1, ..., k`, each writing the
+entries `top`, `top - 1`, ..., down to the number of the pass. -/
+def diffPassesSeq (top : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
+  | 0, y => y
+  | k + 1, y => diffPassSeq (k + 1) top (diffPassesSeq top k y)
+
+/-- On an array of `d + 1` entries, the initialisation loops are `diffPasses`. -/
+theorem truncate_diffPassesSeq (d k : ℕ) (y : ℕ → G) :
+    truncate d (diffPassesSeq d k y) = truncate d (diffPasses k y) := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+      rw [diffPassesSeq, diffPasses, truncate_diffPassSeq (by omega)]
+      exact truncate_diffPass_congr ih
+
+/-- Correctness of the algorithm as the loops actually run it, one entry at a time. -/
+theorem stepSeq_iterate_diffPassesSeq_zero {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0)
+    (x : M) (i : ℕ) :
+    (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
+  have h0 : ∀ z : ℕ → G, (stepSeq d)^[i] z 0 = step^[i] (truncate d z) 0 := fun z ↦ by
+    rw [← truncate_stepSeq_iterate]
+    simp [truncate]
+  rw [h0, truncate_diffPassesSeq]
+  exact step_iterate_diffPasses_zero hf x i
+
 section Eval
 
 open Polynomial
@@ -202,6 +341,15 @@ theorem step_iterate_diffPasses_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree
     step^[i] (truncate d (diffPasses d fun j ↦ P.eval (x + j * h))) 0 = P.eval (x + i * h) := by
   rw [truncate_diffPasses_eval hP, step_iterate_zero_eval]
 
+/-- The same, for the loops as an implementation runs them. -/
+theorem stepSeq_iterate_diffPassesSeq_zero_eval {P : R[X]} {d : ℕ} (hP : P.natDegree ≤ d)
+    (h x : R) (i : ℕ) :
+    (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ P.eval (x + j * h)) 0 = P.eval (x + i * h) := by
+  rw [show (fun j : ℕ ↦ P.eval (x + j * h)) = fun j : ℕ ↦ P.eval (x + j • h) from by
+    simp [nsmul_eq_mul]]
+  simpa [nsmul_eq_mul] using
+    stepSeq_iterate_diffPassesSeq_zero (fwdDiff_iter_eval_eq_zero (by omega) h) x i
+
 end Eval
 
 section Coeffs
@@ -257,6 +405,15 @@ theorem step_iterate_diffPasses_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x :
       = evalCoeffs d c (x + i * h) := by
   rw [truncate_diffPasses_evalCoeffs, ← nsmul_eq_mul]
   exact step_iterate_zero h (evalCoeffs d c) x i
+
+/-- The same, for the loops as an implementation runs them. -/
+theorem stepSeq_iterate_diffPassesSeq_zero_evalCoeffs (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
+    (stepSeq d)^[i] (diffPassesSeq d d fun j ↦ evalCoeffs d c (x + j * h)) 0
+      = evalCoeffs d c (x + i * h) := by
+  rw [show (fun j : ℕ ↦ evalCoeffs d c (x + j * h)) = fun j : ℕ ↦ evalCoeffs d c (x + j • h) from by
+    simp [nsmul_eq_mul]]
+  have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
+  simpa [nsmul_eq_mul] using stepSeq_iterate_diffPassesSeq_zero hf x i
 
 end Coeffs
 
