@@ -6,10 +6,17 @@ as implemented by [`Poly::eval_range`][eval_range] in `fastcrypto-tbls`.
 The algorithm is Knuth's, *The Art of Computer Programming*, Volume 2, section 4.6.4, where the
 initialisation is exercise 7. It is also described [here](https://www.jonaslindstrom.dk/?p=1306).
 
-To evaluate `P` at `x`, `x + h`, `x + 2h`, ..., keep the forward difference table of `P` at `x` and
-repeatedly replace every entry `y j` by `y j + y (j + 1)`; the head of the table runs through the
-values of `P`. Each point then costs `deg P` additions and no multiplications, against the `deg P`
-additions and `deg P` multiplications of Horner's rule.
+To evaluate $P$ at $x, x + h, x + 2h, \dots$, keep the forward difference table of $P$ at $x$,
+
+$$y_j = \Delta_h^j P(x), \qquad \Delta_h f(x) = f(x + h) - f(x),$$
+
+and repeatedly replace every entry by
+
+$$y_j \leftarrow y_j + y_{j + 1}.$$
+
+The head $y_0$ then runs through $P(x), P(x + h), P(x + 2h), \dots$, at a cost of $\deg P$
+additions and no multiplications per point, against the $\deg P$ additions and $\deg P$
+multiplications of Horner's rule.
 
 ## Main results
 
