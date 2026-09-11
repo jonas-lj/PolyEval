@@ -64,8 +64,8 @@ def diffPasses : ℕ → (ℕ → G) → (ℕ → G)
   | 0, y => y
   | k + 1, y => diffPass (k + 1) (diffPasses k y)
 
-/-- After k passes over the values f(x), f(x + h), f(x + 2h), ..., entry j is Δ_h^m f(x + (j -
-m)·h), where m = min(j, k). -/
+/-- After k passes over the values f(x), f(x + h), f(x + 2h), ..., entry j is
+Δ_h^m f(x + (j - m)·h), where m = min(j, k). -/
 theorem diffPasses_apply (h x : M) (f : M → G) (k j : ℕ) :
     diffPasses k (fun i ↦ f (x + i • h)) j = Δ_[h]^[min j k] f (x + (j - min j k) • h) := by
   induction k generalizing j with
@@ -81,8 +81,8 @@ theorem diffPasses_apply (h x : M) (f : M → G) (k j : ℕ) :
         simp [fwdDiff]
       · rw [if_neg hj, ih, min_eq_left (by omega : j ≤ k), min_eq_left (by omega : j ≤ k + 1)]
 
-/-- After k passes over the values f(x), f(x + h), f(x + 2h), ..., entry j is Δ_h^j f(x) for every j
-≤ k. -/
+/-- After k passes over the values f(x), f(x + h), f(x + 2h), ..., entry j is Δ_h^j f(x) for
+every j ≤ k. -/
 theorem diffPasses_eq_table (h x : M) (f : M → G) {k j : ℕ} (hj : j ≤ k) :
     diffPasses k (fun i ↦ f (x + i • h)) j = table h f x j := by
   rw [diffPasses_apply, min_eq_left hj]
@@ -143,12 +143,7 @@ theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
     truncate d (iterateState d y) = next (truncate d y) := by
   funext j
   simp only [truncate, next, iterateState_apply]
-  by_cases hj : j < d
-  · rw [if_pos (by omega : j ≤ d), if_pos hj, if_pos (by omega : j ≤ d),
-      if_pos (by omega : j + 1 ≤ d)]
-  · by_cases hjd : j ≤ d
-    · rw [if_pos hjd, if_neg hj, if_pos hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
-    · rw [if_neg hjd, if_neg hjd, if_neg (by omega : ¬ j + 1 ≤ d), add_zero]
+  split_ifs <;> first | rfl | (exfalso; omega) | simp
 
 /-- On an array of d + 1 entries, i runs of the loop are i applications of next. -/
 theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
@@ -157,8 +152,8 @@ theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
   | zero => simp
   | succ i ih => rw [iterate_succ_apply, iterate_succ_apply, ih, truncate_iterateState]
 
-/-- One differencing pass as the loop performs it: the writes y_j ← y_j - y_{j-1} for j = top, top -
-1, ..., k, one entry at a time in decreasing j. -/
+/-- One differencing pass as the loop performs it: the writes y_j ← y_j - y_{j-1} for
+j = top, top - 1, ..., k, one entry at a time in decreasing j. -/
 def computeStatePass (k : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
   | 0, y => y
   | top + 1, y =>
@@ -199,12 +194,7 @@ private theorem truncate_computeStatePass {k : ℕ} (hk : 1 ≤ k) (d : ℕ) (y 
     truncate d (computeStatePass k d y) = truncate d (diffPass k y) := by
   funext j
   simp only [truncate, diffPass, computeStatePass_apply hk]
-  by_cases hj : j ≤ d
-  · rw [if_pos hj, if_pos hj]
-    by_cases hkj : k ≤ j
-    · rw [if_pos ⟨hkj, hj⟩, if_pos hkj]
-    · rw [if_neg (by tauto), if_neg hkj]
-  · rw [if_neg hj, if_neg hj]
+  split_ifs <;> first | rfl | tauto
 
 /-- A pass sends arrays with the same first d + 1 entries to arrays with the same first d + 1
 entries. -/
@@ -253,7 +243,7 @@ theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
   rw [h0, truncate_computeState]
   exact next_iterate_diffPasses_zero hf x i
 
-section Coeffs
+section EvalRange
 
 variable {R : Type*} [CommRing R] {V : Type*} [AddCommGroup V] [Module R V]
 
@@ -266,6 +256,6 @@ theorem eval_range_correct (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
   have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
   simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
-end Coeffs
+end EvalRange
 
 end PolyEval
