@@ -38,7 +38,7 @@ open Polynomial
 variable {R : Type*} [CommRing R]
 
 /-- Differencing s ↦ g(h·s + x) with step 1, at t, gives Δ_h g at h·t + x. -/
-theorem fwdDiff_comp_affine (h x : R) (g : R → G) (t : R) :
+private theorem fwdDiff_comp_affine (h x : R) (g : R → G) (t : R) :
     Δ_[1] (fun s ↦ g (h * s + x)) t = Δ_[h] g (h * t + x) := by
   simp [fwdDiff, mul_add, add_right_comm]
 
@@ -65,6 +65,13 @@ theorem fwdDiff_iter_eval_eq_zero {P : R[X]} {n : ℕ} (hP : P.natDegree < n) (h
   rw [show (fun s : R ↦ P.eval (h * s + x)) = (P.comp (C h * X + C x)).eval from by
     funext s; simp, Polynomial.fwdDiff_iter_eq_zero_of_degree_lt hdeg] at key
   simpa using key.symm
+
+/-- Δ_h^n (x ↦ x^k) = 0 for k < n, at any step h -/
+theorem fwdDiff_iter_pow_eq_zero {k n : ℕ} (hk : k < n) (h : R) :
+    Δ_[h]^[n] (fun x : R ↦ x ^ k) = 0 := by
+  have hXk : ((X : R[X]) ^ k).natDegree ≤ k := by
+    simpa using le_trans natDegree_pow_le (Nat.mul_le_mul (le_refl k) natDegree_X_le)
+  simpa using fwdDiff_iter_eval_eq_zero (lt_of_le_of_lt hXk hk) h
 
 end Eval
 
@@ -96,13 +103,8 @@ theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V)
   rw [show (evalCoeffs d c : R → V) = ∑ k ∈ range (d + 1), fun x : R ↦ x ^ k • c k from by
     funext x; simp [evalCoeffs], fwdDiff_iter_finsetSum]
   refine sum_eq_zero fun k hk ↦ ?_
-  have hXk : ((X : R[X]) ^ k).natDegree ≤ k := by
-    simpa using le_trans natDegree_pow_le (Nat.mul_le_mul (le_refl k) natDegree_X_le)
-  have hk' : ((X : R[X]) ^ k).natDegree < n := by
-    have := mem_range.mp hk
-    omega
-  rw [show (fun x : R ↦ x ^ k • c k) = fun x : R ↦ ((X : R[X]) ^ k).eval x • c k from by
-    funext x; simp, fwdDiff_iter_smul_const, fwdDiff_iter_eval_eq_zero hk' h]
+  have hk' : k < n := by have := mem_range.mp hk; omega
+  rw [fwdDiff_iter_smul_const n h (fun x : R ↦ x ^ k) (c k), fwdDiff_iter_pow_eq_zero hk' h]
   funext x
   simp
 

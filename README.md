@@ -59,11 +59,11 @@ multiplications of Horner's rule.
       next^[i] (table h f x) 0 = f (x + i • h)
   ```
 
-* `PolyEval.fwdDiff_iter_eval_eq_zero` — `Δ_[h]^[n] P.eval = 0` when `P.natDegree < n`. Mathlib has
-  this only for step size `1` (`Polynomial.fwdDiff_iter_eq_zero_of_degree_lt`); this generalises it
-  to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the module-valued
-  counterpart, and it is what makes `d + 1` entries enough. These, and the rest of the results
-  about the operator alone, live in `PolyEval/ForwardDiff.lean`.
+* `PolyEval.fwdDiff_iter_eval_eq_zero` — $\Delta_h^n P = 0$ whenever $\deg P < n$. Mathlib proves
+  this for step size $1$ only, as `Polynomial.fwdDiff_iter_eq_zero_of_degree_lt`, and this
+  generalises it to an arbitrary step. `PolyEval.fwdDiff_iter_evalCoeffs_eq_zero` is the
+  module-valued counterpart, and it is what makes `d + 1` entries enough. These, and the rest of
+  the results about the operator alone, live in `PolyEval/ForwardDiff.lean`.
 
 ## The implementation
 
