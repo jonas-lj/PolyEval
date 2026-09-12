@@ -10,8 +10,8 @@ y_j + y_{j+1}. The head runs through the values of P, at a cost of deg P additio
 multiplications per point.
 
 `eval_range_correct` is the whole algorithm, initialisation included, as `Poly::eval_range` in
-`fastcrypto-tbls` runs it. One call of `next` performs one update, and `h` is the spacing of the
-progression, which `fastcrypto` calls `step`.
+`fastcrypto-tbls` runs it. Each call of `fastcrypto`'s `next` after the first performs one update,
+x is what `fastcrypto` calls `initial`, and h, the spacing of the progression, is its `step`.
 
 Knuth, *The Art of Computer Programming*, Volume 2, section 4.6.4, with the initialisation in
 exercise 7. See also <https://www.jonaslindstrom.dk/?p=1306> and
@@ -28,8 +28,8 @@ variable {M G : Type*} [AddCommMonoid M] [AddCommGroup G]
 Δ_h f(x) = f(x + h) - f(x). -/
 def table (h : M) (f : M → G) (x : M) : ℕ → G := fun j ↦ Δ_[h]^[j] f x
 
-/-- One call of `fastcrypto`'s `next`. Every entry gains the one below it, y_j ← y_j + y_{j+1}, for
-all j at once. -/
+/-- The update each call of `fastcrypto`'s `next` after the first performs: y_j ← y_j + y_{j+1},
+for all j at once. -/
 def next (y : ℕ → G) : ℕ → G := fun j ↦ y j + y (j + 1)
 
 /-- Δ_h^j f(x + h) = Δ_h^j f(x) + Δ_h^{j+1} f(x) -/
@@ -110,12 +110,9 @@ an array of d + 1 entries, give the table of f at x. -/
 theorem truncate_diffPasses {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0) (x : M) :
     truncate d (diffPasses d fun j ↦ f (x + j • h)) = table h f x := by
   funext j
-  simp only [truncate]
   by_cases hj : j ≤ d
-  · rw [if_pos hj]
-    exact diffPasses_eq_table h x f hj
-  · rw [if_neg hj]
-    simp [table, fwdDiff_iter_eq_zero_of_lt hf (by omega : d < j)]
+  · simpa [truncate, hj] using diffPasses_eq_table h x f hj
+  · simp [truncate, hj, table, fwdDiff_iter_eq_zero_of_lt hf (by omega : d < j)]
 
 /-- If Δ_h^{d+1} f = 0, then the d passes over the values f(x), f(x + h), ..., f(x + d·h), read as
 an array of d + 1 entries, followed by i applications of next, leave f(x + i·h) in entry 0. -/
@@ -145,15 +142,8 @@ theorem iterateState_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
   induction k generalizing j with
   | zero => simp [iterateState]
   | succ k ih =>
-      rw [iterateState, Function.update_apply]
-      by_cases hj : j = k
-      · subst hj
-        rw [if_pos rfl, ih, ih]
-        simp
-      · rw [if_neg hj, ih]
-        by_cases hjk : j < k
-        · rw [if_pos hjk, if_pos (by omega : j < k + 1)]
-        · rw [if_neg hjk, if_neg (by omega : ¬ j < k + 1)]
+      rw [iterateState, Function.update_apply, ih, ih, ih]
+      split_ifs <;> first | rfl | (exfalso; omega) | simp_all
 
 /-- On an array of d + 1 entries, one run of the loop is one application of next. -/
 theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
@@ -164,10 +154,8 @@ theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
 
 /-- On an array of d + 1 entries, i runs of the loop are i applications of next. -/
 theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
-    truncate d ((iterateState d)^[i] y) = next^[i] (truncate d y) := by
-  induction i generalizing y with
-  | zero => simp
-  | succ i ih => rw [iterate_succ_apply, iterate_succ_apply, ih, truncate_iterateState]
+    truncate d ((iterateState d)^[i] y) = next^[i] (truncate d y) :=
+  Semiconj.iterate_right (truncate_iterateState d) i y
 
 /-- One differencing pass as the loop performs it: the writes y_j ← y_j - y_{j-1} for
 j = top, top - 1, ..., k, one entry at a time in decreasing j. -/
@@ -186,19 +174,8 @@ theorem computeStatePass_apply {k : ℕ} (hk : 1 ≤ k) (top : ℕ) (y : ℕ →
   | succ top ih =>
       rw [computeStatePass]
       by_cases hk' : k ≤ top + 1
-      · rw [if_pos hk', ih]
-        by_cases hjt : j ≤ top
-        · rw [Function.update_of_ne (by omega : j ≠ top + 1),
-            Function.update_of_ne (by omega : j - 1 ≠ top + 1)]
-          by_cases hkj : k ≤ j
-          · rw [if_pos ⟨hkj, hjt⟩, if_pos ⟨hkj, by omega⟩]
-          · rw [if_neg (by tauto), if_neg (by tauto)]
-        · by_cases hjt' : j = top + 1
-          · subst hjt'
-            rw [if_neg (by omega), if_pos ⟨hk', le_refl _⟩, Function.update_self]
-            simp
-          · rw [if_neg (by omega), if_neg (by omega),
-              Function.update_of_ne (by omega : j ≠ top + 1)]
+      · rw [if_pos hk', ih, Function.update_apply, Function.update_apply]
+        split_ifs <;> first | rfl | (exfalso; omega) | simp_all
       · rw [if_neg hk', if_neg (by omega)]
 
 /-- Arrays with the same first d + 1 entries agree at every index up to d. -/
@@ -219,11 +196,10 @@ private theorem truncate_diffPass_congr {d k : ℕ} {A B : ℕ → G}
     (hAB : truncate d A = truncate d B) :
     truncate d (diffPass k A) = truncate d (diffPass k B) := by
   funext j
-  simp only [truncate, diffPass]
   by_cases hj : j ≤ d
-  · rw [if_pos hj, if_pos hj, eq_of_truncate_eq hAB hj,
-      eq_of_truncate_eq hAB (by omega : j - 1 ≤ d)]
-  · rw [if_neg hj, if_neg hj]
+  · simp [truncate, diffPass, hj, eq_of_truncate_eq hAB hj,
+      eq_of_truncate_eq hAB (show j - 1 ≤ d by omega)]
+  · simp [truncate, hj]
 
 /-- Passes 1 through k as the loop performs them, each writing the entries top, top - 1, ..., down
 to its own number. `computeState` runs all of them. -/
@@ -311,8 +287,8 @@ open Finset Polynomial
 variable {R : Type*} [CommRing R] {V : Type*} [AddCommGroup V] [Module R V]
 
 /-- The polynomial function P(x) = ∑_{k ≤ d} x^k · c_k, with coefficients c_k in a module V over R
-and the variable running over R. This is `fastcrypto`'s `Poly<C>`, whose coefficients are group
-elements and whose variable is a scalar, a case `Polynomial R` does not describe. -/
+and the variable running over R. This is the function `fastcrypto`'s `Poly::eval` computes, with
+group elements as coefficients and a scalar variable, a case `Polynomial R` does not describe. -/
 def evalCoeffs (d : ℕ) (c : ℕ → V) : R → V := fun x ↦ ∑ k ∈ range (d + 1), x ^ k • c k
 
 /-- For a fixed v, differencing y ↦ p(y)·v n times gives y ↦ (Δ_h^n p)(y)·v. -/
