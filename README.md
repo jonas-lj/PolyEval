@@ -86,21 +86,20 @@ This is what pins the loop directions down. The update loop reads the entry abov
 writes, so it has to run upwards, and a differencing pass reads the entry below, so it has to run
 downwards. Reversing either would read an entry it had already overwritten.
 
-Four details of the correspondence are worth stating, since the theorem does not see them.
+Three details of the correspondence are worth stating, since the theorem does not see them.
 
 * The array is `degree() + 1` long rather than one per coefficient. Dropping zero leading
-  coefficients leaves the function unchanged, so the degree hypothesis still holds.
-* [`simple_from_evaluations`][simple_from_evaluations] runs one extra update before its first
-  yield and labels it index 1. The same theorem covers it, started at 0, with output `i` reached
-  after `i + 1` updates.
+  coefficients leaves the function unchanged, so summing only up to `degree()` gives the same
+  polynomial.
 * Index arithmetic is checked and the iterator ends rather than wrapping, so the points really are
   the arithmetic progression.
 * [`eval_range`][eval_range] evaluates directly when `m` is 0 or `u16::MAX`, or when the degree is
   at least `u16::MAX`. Those branches never reach the algorithm.
 
 What the alignment still rests on, and Lean does not check: that Horner's rule in [`eval`][eval]
-computes the polynomial, that a `Vec` of `d + 1` entries behaves like a function that is zero above
-`d`, and that a `ShareIndex` converts to a scalar compatibly with the arithmetic on indices.
+computes the polynomial, that the loops never index outside the array, which is what makes it sound
+to treat the entries past its end as zero, and that a `ShareIndex` converts to a scalar compatibly
+with the arithmetic on indices.
 
 [eval_range]: https://github.com/MystenLabs/fastcrypto/blob/main/fastcrypto-tbls/src/polynomial.rs
 [poly]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L26
@@ -109,7 +108,6 @@ computes the polynomial, that a `Vec` of `d + 1` entries behaves like a function
 [eval_range_pinned]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L157-L179
 [evaluator]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L642-L647
 [new]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L653-L673
-[simple_from_evaluations]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L676-L688
 [compute_state]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L690-L698
 [iterate_state]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L700-L704
 [next]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L710-L721
