@@ -46,11 +46,9 @@ theorem next_table (h : M) (f : M → G) (x : M) : next (table h f x) = table h 
 /-- Applying next i times to the table of f at x gives the table of f at x + i·h. -/
 theorem next_iterate (h : M) (f : M → G) (x : M) (i : ℕ) :
     next^[i] (table h f x) = table h f (x + i • h) := by
-  induction i generalizing x with
-  | zero => simp
-  | succ i ih =>
-      rw [iterate_succ_apply, next_table, ih, succ_nsmul]
-      abel_nf
+  have := Semiconj.iterate_right (f := table h f) (ga := (· + h)) (gb := next)
+    (fun x ↦ (next_table h f x).symm) i x
+  simpa [add_right_iterate] using this.symm
 
 /-- After applying next i times to the table of f at x, entry 0 is f(x + i·h). -/
 theorem next_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
@@ -88,22 +86,12 @@ theorem diffPasses_apply (h x : M) (f : M → G) (k j : ℕ) :
         simp [fwdDiff]
       · rw [if_neg hj, ih, min_eq_left (by omega : j ≤ k), min_eq_left (by omega : j ≤ k + 1)]
 
-/-- After k passes over the values f(x), f(x + h), f(x + 2h), ..., entry j is Δ_h^j f(x) for
-every j ≤ k. -/
-theorem diffPasses_eq_table (h x : M) (f : M → G) {k j : ℕ} (hj : j ≤ k) :
-    diffPasses k (fun i ↦ f (x + i • h)) j = table h f x j := by
-  rw [diffPasses_apply, min_eq_left hj]
-  simp [table]
-
-/-- Δ_h^k 0 = 0 -/
-private theorem fwdDiff_iter_zero (h : M) (k : ℕ) : Δ_[h]^[k] (0 : M → G) = 0 := by
-  simpa only [fwdDiff_aux.coe_fwdDiffₗ_pow] using map_zero (fwdDiff_aux.fwdDiffₗ M G h ^ k)
-
 /-- Δ_h^{d+1} f = 0 and d < j imply Δ_h^j f = 0 -/
 theorem fwdDiff_iter_eq_zero_of_lt {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0) {j : ℕ}
     (hj : d < j) : Δ_[h]^[j] f = 0 := by
   obtain ⟨k, rfl⟩ : ∃ k, j = k + (d + 1) := ⟨j - (d + 1), by omega⟩
-  rw [iterate_add_apply, hf, fwdDiff_iter_zero]
+  rw [iterate_add_apply, hf]
+  simpa only [fwdDiff_aux.coe_fwdDiffₗ_pow] using map_zero (fwdDiff_aux.fwdDiffₗ M G h ^ k)
 
 /-- If Δ_h^{d+1} f = 0, then the d passes over the values f(x), f(x + h), ..., f(x + d·h), read as
 an array of d + 1 entries, give the table of f at x. -/
@@ -111,7 +99,7 @@ theorem truncate_diffPasses {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1]
     truncate d (diffPasses d fun j ↦ f (x + j • h)) = table h f x := by
   funext j
   by_cases hj : j ≤ d
-  · simpa [truncate, hj] using diffPasses_eq_table h x f hj
+  · simp [truncate, hj, table, diffPasses_apply]
   · simp [truncate, hj, table, fwdDiff_iter_eq_zero_of_lt hf (by omega : d < j)]
 
 /-- If Δ_h^{d+1} f = 0, then the d passes over the values f(x), f(x + h), ..., f(x + d·h), read as
@@ -230,22 +218,15 @@ theorem truncate_computeState (d : ℕ) (y : ℕ → G) :
 theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
     (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
-  have h0 : ∀ z : ℕ → G, (iterateState d)^[i] z 0 = next^[i] (truncate d z) 0 := fun z ↦ by
-    rw [← truncate_iterateState_iterate]
-    simp [truncate]
-  rw [h0, truncate_computeState]
-  exact next_iterate_diffPasses_zero hf x i
+  rw [← next_iterate_diffPasses_zero hf x i, ← truncate_computeState,
+    ← truncate_iterateState_iterate]
+  simp [truncate]
 
 section Eval
 
 open Polynomial
 
 variable {R : Type*} [CommRing R]
-
-/-- Differencing s ↦ g(h·s + x) with step 1, at t, gives Δ_h g at h·t + x. -/
-private theorem fwdDiff_comp_affine (h x : R) (g : R → G) (t : R) :
-    Δ_[1] (fun s ↦ g (h * s + x)) t = Δ_[h] g (h * t + x) := by
-  simp [fwdDiff, mul_add, add_right_comm]
 
 /-- Differencing s ↦ g(h·s + x) n times with step 1, at t, gives Δ_h^n g at h·t + x. -/
 theorem fwdDiff_iter_comp_affine (n : ℕ) (h x : R) (g : R → G) (t : R) :
@@ -255,7 +236,7 @@ theorem fwdDiff_iter_comp_affine (n : ℕ) (h x : R) (g : R → G) (t : R) :
   | succ n ih =>
       rw [iterate_succ_apply, iterate_succ_apply,
         show (Δ_[1] fun s ↦ g (h * s + x)) = fun s ↦ Δ_[h] g (h * s + x) from
-          funext (fwdDiff_comp_affine h x g)]
+          funext fun t ↦ by simp [fwdDiff, mul_add, add_right_comm]]
       exact ih (Δ_[h] g)
 
 /-- Δ_h^n P = 0 for deg P < n, at any step h -/
@@ -280,16 +261,22 @@ theorem fwdDiff_iter_pow_eq_zero {k n : ℕ} (hk : k < n) (h : R) :
 
 end Eval
 
+/-- A polynomial with coefficients c_0, ..., c_degree in V, as `fastcrypto`'s `Poly<C>` stores them.
+Coefficients past `degree` are ignored. -/
+structure Poly (V : Type*) where
+  degree : ℕ
+  coeff : ℕ → V
+
 section Coeffs
 
 open Finset Polynomial
 
 variable {R : Type*} [CommRing R] {V : Type*} [AddCommGroup V] [Module R V]
 
-/-- The polynomial function P(x) = ∑_{k ≤ d} x^k · c_k, with coefficients c_k in a module V over R
-and the variable running over R. This is the function `fastcrypto`'s `Poly::eval` computes, with
-group elements as coefficients and a scalar variable, a case `Polynomial R` does not describe. -/
-def evalCoeffs (d : ℕ) (c : ℕ → V) : R → V := fun x ↦ ∑ k ∈ range (d + 1), x ^ k • c k
+/-- P(x) = ∑_{k ≤ degree} x^k · c_k, with coefficients in a module V over R and the variable in R,
+a case `Polynomial R` does not describe. This is the function `fastcrypto`'s `Poly::eval`
+computes. -/
+def Poly.eval (P : Poly V) (x : R) : V := ∑ k ∈ range (P.degree + 1), x ^ k • P.coeff k
 
 /-- For a fixed v, differencing y ↦ p(y)·v n times gives y ↦ (Δ_h^n p)(y)·v. -/
 theorem fwdDiff_iter_smul_const (n : ℕ) (h : R) (p : R → R) (v : V) :
@@ -302,24 +289,24 @@ theorem fwdDiff_iter_smul_const (n : ℕ) (h : R) (p : R → R) (v : V) :
           funext y; simp [fwdDiff, sub_smul]]
       exact ih (Δ_[h] p)
 
-/-- Δ_h^n P = 0 for d < n, at any step h, where P(x) = ∑_{k ≤ d} x^k · c_k. -/
-theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V) (h : R) :
-    Δ_[h]^[n] (evalCoeffs d c : R → V) = 0 := by
-  rw [show (evalCoeffs d c : R → V) = ∑ k ∈ range (d + 1), fun x : R ↦ x ^ k • c k from by
-    funext x; simp [evalCoeffs], fwdDiff_iter_finsetSum]
+/-- Δ_h^n P = 0 for degree < n, at any step h -/
+theorem Poly.fwdDiff_iter_eval_eq_zero (P : Poly V) {n : ℕ} (hn : P.degree < n) (h : R) :
+    Δ_[h]^[n] (P.eval : R → V) = 0 := by
+  rw [show (P.eval : R → V) = ∑ k ∈ range (P.degree + 1), fun x : R ↦ x ^ k • P.coeff k from by
+    funext x; simp [Poly.eval], fwdDiff_iter_finsetSum]
   refine sum_eq_zero fun k hk ↦ ?_
   have hk' : k < n := by have := mem_range.mp hk; omega
-  rw [fwdDiff_iter_smul_const n h (fun x : R ↦ x ^ k) (c k), fwdDiff_iter_pow_eq_zero hk' h]
+  rw [fwdDiff_iter_smul_const n h (fun x : R ↦ x ^ k) (P.coeff k), fwdDiff_iter_pow_eq_zero hk' h]
   funext x
   simp
 
-/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. For P(x) = ∑_{k ≤ d} x^k · c_k,
-initialising an array of d + 1 entries from the values P(x), P(x + h), ..., P(x + d·h) and
-applying the update loop i times leaves P(x + i·h) in entry 0. -/
-theorem eval_range_correct (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-    (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
-      = evalCoeffs d c (x + i * h) := by
-  have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
+/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. Initialising an array of d + 1 entries
+from the values P(x), P(x + h), ..., P(x + d·h), where d is the degree of P, and applying the
+update loop i times leaves P(x + i·h) in entry 0. -/
+theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
+    (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
+      = P.eval (x + i * h) := by
+  have hf := P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h
   simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
 end Coeffs
