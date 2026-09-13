@@ -23,15 +23,16 @@ multiplications of Horner's rule.
 * `PolyEval.eval_range_correct` — correctness of the algorithm as an implementation runs it:
 
   ```lean
-  theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
-      (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
-        = P.eval (x + i * h)
+  theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
+      ((fun e : Evaluator R V P.degree ↦ e.next.2)^[i] (Evaluator.new P.degree P.eval x h)).next.1
+        = (x + i * h, P.eval (x + i * h))
   ```
 
-  Read the left-hand side inside out, which is also the order things happen: the values of the
-  polynomial at the first `d + 1` points, the initialisation loops, `i` runs of the update loop,
-  then the head of the array. Each loop carries its visit order, so it lines up with the code
-  statement by statement.
+  Read it the way the Rust runs: `Evaluator.new` builds the state from the values at the first
+  `d + 1` points, each call of `next` outputs the index and entry 0 of the state, advancing both
+  except on the first call, and the statement is about the output of call `i`. Each loop carries
+  its visit order and runs on a vector of `d + 1` entries, so it lines up with the code statement
+  by statement.
 
   A `Poly V` has its coefficients in a module `V` over `R` and its variable in `R`, which is the
   shape of `fastcrypto`'s `Poly<C>`. `Polynomial R` does not describe those, since it puts the
@@ -39,11 +40,11 @@ multiplications of Horner's rule.
   covers `Poly<C::ScalarType>`, and a `Polynomial R` of degree at most `d` is the `Poly R` with
   that degree and the same coefficients.
 
-* `PolyEval.iterateState_iterate_computeState_zero` — the same for an arbitrary `f` killed by
-  `d + 1` differences. Being a polynomial is used nowhere else, so that one hypothesis is all a
+* `PolyEval.iterateState_iterate_computeState_zero` — the two loops alone, for an arbitrary `f`
+  killed by `d + 1` differences. Being a polynomial is used nowhere else, so that one hypothesis is all a
   polynomial has to supply.
 
-* `PolyEval.truncate_iterateState` and `PolyEval.truncate_computeState` — each loop, visit order
+* `PolyEval.toFun_iterateState` and `PolyEval.toFun_computeState` — each loop, visit order
   included, agrees with the all-at-once update it implements. These carry the read-before-write
   reasoning that writing one entry at a time relies on.
 
@@ -73,16 +74,17 @@ Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbe
 | `Poly V` | [`Poly<C>`][poly] |
 | `P.eval` | [`eval`][eval] |
 | `d`, that is `P.degree` | [`degree`][degree], the index of the last non-zero coefficient |
-| the values at the first `d + 1` points | [`new`][new] |
+| `Evaluator` | [`PolynomialEvaluator`][evaluator] |
+| `Evaluator.new` | [`new`][new] |
 | `computeState d` | [`compute_state`][compute_state] |
-| `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |
 | `iterateState d` | [`iterate_state`][iterate_state] |
-| `(iterateState d)^[i] ... 0` | [`next`][next], which skips the update on the first call |
+| `Evaluator.next` | [`next`][next] |
 | `eval_range_correct` | [`eval_range`][eval_range_pinned] |
 
-`iterateState` and `computeState` are named for the Rust functions they model, and write one entry
-at a time in the order those loops visit them. `PolyEval.truncate_iterateState` and
-`PolyEval.truncate_computeState` prove that each agrees with the all-at-once update it implements.
+`Evaluator`, `iterateState` and `computeState` are named for the Rust they model. The loops run on a
+vector of `d + 1` entries and write one entry at a time in the order the Rust visits them, so every
+index is checked to be in range. `PolyEval.toFun_iterateState` and `PolyEval.toFun_computeState`
+prove that each agrees with the all-at-once update it implements.
 This is what pins the loop directions down. The update loop reads the entry above the one it
 writes, so it has to run upwards, and a differencing pass reads the entry below, so it has to run
 downwards. Reversing either would read an entry it had already overwritten.
@@ -98,9 +100,8 @@ Three details of the correspondence are worth stating, since the theorem does no
   at least `u16::MAX`. Those branches never reach the algorithm.
 
 What the alignment still rests on, and Lean does not check: that Horner's rule in [`eval`][eval]
-computes the polynomial, that the loops never index outside the array, which is what makes it sound
-to treat the entries past its end as zero, and that a `ShareIndex` converts to a scalar compatibly
-with the arithmetic on indices.
+computes the polynomial, and that a `ShareIndex` converts to a scalar compatibly with the arithmetic
+on indices.
 
 [eval_range]: https://github.com/MystenLabs/fastcrypto/blob/main/fastcrypto-tbls/src/polynomial.rs
 [poly]: https://github.com/MystenLabs/fastcrypto/blob/45ec479119f0feaebc65c1665cbfbda9b629bdb2/fastcrypto-tbls/src/polynomial.rs#L26

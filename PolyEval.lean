@@ -9,9 +9,9 @@ entry is y_j = Δ_h^j P(x), where Δ_h f(x) = f(x + h) - f(x). Then repeatedly r
 y_j + y_{j+1}. The head runs through the values of P, at a cost of deg P additions and no
 multiplications per point.
 
-`eval_range_correct` is the whole algorithm, initialisation included, as `Poly::eval_range` in
-`fastcrypto-tbls` runs it. Each call of `fastcrypto`'s `next` after the first performs one update,
-x is what `fastcrypto` calls `initial`, and h, the spacing of the progression, is its `step`.
+`eval_range_correct` is the whole algorithm as `Poly::eval_range` in `fastcrypto-tbls` runs it, down
+to the evaluator it iterates. x is what `fastcrypto` calls `initial`, and h, the spacing of the
+progression, is its `step`.
 
 Knuth, *The Art of Computer Programming*, Volume 2, section 4.6.4, with the initialisation in
 exercise 7. See also <https://www.jonaslindstrom.dk/?p=1306> and
@@ -28,8 +28,7 @@ variable {M G : Type*} [AddCommMonoid M] [AddCommGroup G]
 Δ_h f(x) = f(x + h) - f(x). -/
 def table (h : M) (f : M → G) (x : M) : ℕ → G := fun j ↦ Δ_[h]^[j] f x
 
-/-- The update each call of `fastcrypto`'s `next` after the first performs: y_j ← y_j + y_{j+1},
-for all j at once. -/
+/-- The update `fastcrypto`'s `iterate_state` performs, all entries at once: y_j ← y_j + y_{j+1}. -/
 def next (y : ℕ → G) : ℕ → G := fun j ↦ y j + y (j + 1)
 
 /-- Δ_h^j f(x + h) = Δ_h^j f(x) + Δ_h^{j+1} f(x) -/
@@ -111,116 +110,210 @@ theorem next_iterate_diffPasses_zero {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h
 
 /-! ### The loops as an implementation runs them
 
-`next` and `diffPass` rewrite the whole array at once, while an implementation writes one entry at
-a time. The definitions below are those loops, visit order included, and each is proved equal to
-the update it implements. The orders are forced: the update loop reads the entry above the one it
+`next` and `diffPass` rewrite the whole array at once, while an implementation writes one entry of a
+vector at a time. The definitions below are those loops on a vector of d + 1 entries, visit order
+included, so every read and write is checked to stay inside it, and each loop is proved equal to the
+update it implements. The orders are forced: the update loop reads the entry above the one it
 writes, so it must run upwards, and a differencing pass reads the entry below, so it must run
 downwards. Reversing either makes it read an entry it has already overwritten.
 -/
 
-/-- `fastcrypto`'s `iterate_state`. The writes y_j ← y_j + y_{j+1} for j = 0, 1, ..., k - 1,
-performed one entry at a time in increasing j. -/
-def iterateState : ℕ → (ℕ → G) → (ℕ → G)
-  | 0, y => y
-  | k + 1, y => Function.update (iterateState k y) k (iterateState k y k + iterateState k y (k + 1))
+/-- The vector read as a function on every index, with everything past its end set to zero. -/
+def toFun {d : ℕ} (v : Vector G (d + 1)) : ℕ → G := fun j ↦ if h : j < d + 1 then v[j] else 0
+
+/-- toFun v j = v_j for j ≤ d -/
+private theorem toFun_of_lt {d j : ℕ} (v : Vector G (d + 1)) (h : j < d + 1) :
+    toFun v j = v[j] := by
+  simp [toFun, h]
+
+/-- Writing entry i of the vector updates entry i of toFun v. -/
+private theorem toFun_set {d i : ℕ} (v : Vector G (d + 1)) (hi : i < d + 1) (a : G) :
+    toFun (v.set i a hi) = Function.update (toFun v) i a := by
+  funext j
+  by_cases hj : j < d + 1
+  · by_cases hij : j = i
+    · subst hij; simp [toFun, hj]
+    · simp [toFun, hj, hij, Ne.symm hij]
+  · simp [toFun, hj, show j ≠ i by omega]
+
+/-- The first k writes of `fastcrypto`'s `iterate_state`: y_j ← y_j + y_{j+1} for
+j = 0, 1, ..., k - 1, one entry at a time in increasing j. -/
+def iterateStateAux (d : ℕ) : (k : ℕ) → k ≤ d → Vector G (d + 1) → Vector G (d + 1)
+  | 0, _, v => v
+  | k + 1, hk, v =>
+      let w := iterateStateAux d k (by omega) v
+      w.set k (w[k] + w[k + 1])
+
+/-- `fastcrypto`'s `iterate_state` on d + 1 entries. -/
+def iterateState (d : ℕ) (v : Vector G (d + 1)) : Vector G (d + 1) := iterateStateAux d d le_rfl v
 
 /-- The loop turns y into the array whose entry j is y_j + y_{j+1} for j < k, and y_j for j ≥ k. -/
-theorem iterateState_apply (k : ℕ) (y : ℕ → G) (j : ℕ) :
-    iterateState k y j = if j < k then y j + y (j + 1) else y j := by
+theorem toFun_iterateStateAux (d k : ℕ) (hk : k ≤ d) (v : Vector G (d + 1)) (j : ℕ) :
+    toFun (iterateStateAux d k hk v) j
+      = if j < k then toFun v j + toFun v (j + 1) else toFun v j := by
   induction k generalizing j with
-  | zero => simp [iterateState]
+  | zero => simp [iterateStateAux]
   | succ k ih =>
-      rw [iterateState, Function.update_apply, ih, ih, ih]
+      simp only [iterateStateAux]
+      rw [toFun_set, Function.update_apply, ← toFun_of_lt _ (by omega : k < d + 1),
+        ← toFun_of_lt _ (by omega : k + 1 < d + 1), ih, ih, ih]
       split_ifs <;> first | rfl | (exfalso; omega) | simp_all
 
-/-- On an array of d + 1 entries, one run of the loop is one application of next. -/
-theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
-    truncate d (iterateState d y) = next (truncate d y) := by
+/-- One run of the loop is one application of next. -/
+theorem toFun_iterateState (d : ℕ) (v : Vector G (d + 1)) :
+    toFun (iterateState d v) = next (toFun v) := by
   funext j
-  simp only [truncate, next, iterateState_apply]
-  split_ifs <;> first | rfl | (exfalso; omega) | simp
+  rw [iterateState, toFun_iterateStateAux]
+  simp only [next]
+  split_ifs with hj
+  · rfl
+  · rw [show toFun v (j + 1) = 0 by simp [toFun, show ¬ j + 1 < d + 1 by omega], add_zero]
 
-/-- On an array of d + 1 entries, i runs of the loop are i applications of next. -/
-theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
-    truncate d ((iterateState d)^[i] y) = next^[i] (truncate d y) :=
-  Semiconj.iterate_right (truncate_iterateState d) i y
+/-- i runs of the loop are i applications of next. -/
+theorem toFun_iterateState_iterate (d i : ℕ) (v : Vector G (d + 1)) :
+    toFun ((iterateState d)^[i] v) = next^[i] (toFun v) :=
+  Semiconj.iterate_right (toFun_iterateState d) i v
 
 /-- One differencing pass as the loop performs it: the writes y_j ← y_j - y_{j-1} for
 j = top, top - 1, ..., k, one entry at a time in decreasing j. -/
-def computeStatePass (k : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
-  | 0, y => y
-  | top + 1, y =>
-      if k ≤ top + 1 then computeStatePass k top (Function.update y (top + 1) (y (top + 1) - y top))
-      else y
+def computeStatePass (d k : ℕ) : (top : ℕ) → top ≤ d → Vector G (d + 1) → Vector G (d + 1)
+  | 0, _, v => v
+  | top + 1, ht, v =>
+      if k ≤ top + 1 then
+        computeStatePass d k top (by omega) (v.set (top + 1) (v[top + 1] - v[top]))
+      else v
 
 /-- The pass turns y into the array whose entry j is y_j - y_{j-1} for k ≤ j ≤ top, and y_j
 elsewhere. -/
-theorem computeStatePass_apply {k : ℕ} (hk : 1 ≤ k) (top : ℕ) (y : ℕ → G) (j : ℕ) :
-    computeStatePass k top y j = if k ≤ j ∧ j ≤ top then y j - y (j - 1) else y j := by
-  induction top generalizing y j with
+theorem toFun_computeStatePass {d k : ℕ} (hk : 1 ≤ k) (top : ℕ) (ht : top ≤ d)
+    (v : Vector G (d + 1)) (j : ℕ) :
+    toFun (computeStatePass d k top ht v) j
+      = if k ≤ j ∧ j ≤ top then toFun v j - toFun v (j - 1) else toFun v j := by
+  induction top generalizing v j with
   | zero => rw [computeStatePass, if_neg (by omega)]
   | succ top ih =>
       rw [computeStatePass]
       by_cases hk' : k ≤ top + 1
-      · rw [if_pos hk', ih, Function.update_apply, Function.update_apply]
+      · rw [if_pos hk', ih, toFun_set, Function.update_apply, Function.update_apply,
+          ← toFun_of_lt _ (by omega : top + 1 < d + 1),
+          ← toFun_of_lt _ (by omega : top < d + 1)]
         split_ifs <;> first | rfl | (exfalso; omega) | simp_all
       · rw [if_neg hk', if_neg (by omega)]
 
-/-- Arrays with the same first d + 1 entries agree at every index up to d. -/
-private theorem eq_of_truncate_eq {d : ℕ} {A B : ℕ → G} (hAB : truncate d A = truncate d B) {j : ℕ}
-    (hj : j ≤ d) : A j = B j := by
-  simpa [truncate, hj] using congrFun hAB j
-
-/-- On an array of d + 1 entries, one pass of the loop is one all-at-once pass, for k ≥ 1. -/
-private theorem truncate_computeStatePass {k : ℕ} (hk : 1 ≤ k) (d : ℕ) (y : ℕ → G) :
-    truncate d (computeStatePass k d y) = truncate d (diffPass k y) := by
+/-- One pass of the loop over all d + 1 entries is one all-at-once pass, for k ≥ 1. -/
+private theorem toFun_computeStatePass_top {d k : ℕ} (hk : 1 ≤ k) (v : Vector G (d + 1)) :
+    toFun (computeStatePass d k d le_rfl v) = truncate d (diffPass k (toFun v)) := by
   funext j
-  simp only [truncate, diffPass, computeStatePass_apply hk]
-  split_ifs <;> first | rfl | tauto
+  rw [toFun_computeStatePass hk]
+  simp only [truncate, diffPass]
+  by_cases hj : j ≤ d
+  · split_ifs <;> first | rfl | (exfalso; omega)
+  · simp [hj, toFun, show ¬ j < d + 1 by omega]
 
 /-- A pass sends arrays with the same first d + 1 entries to arrays with the same first d + 1
 entries. -/
 private theorem truncate_diffPass_congr {d k : ℕ} {A B : ℕ → G}
     (hAB : truncate d A = truncate d B) :
     truncate d (diffPass k A) = truncate d (diffPass k B) := by
+  have e : ∀ {j}, j ≤ d → A j = B j := fun {j} hj ↦ by simpa [truncate, hj] using congrFun hAB j
   funext j
   by_cases hj : j ≤ d
-  · simp [truncate, diffPass, hj, eq_of_truncate_eq hAB hj,
-      eq_of_truncate_eq hAB (show j - 1 ≤ d by omega)]
+  · simp [truncate, diffPass, hj, e hj, e (show j - 1 ≤ d by omega)]
   · simp [truncate, hj]
 
-/-- Passes 1 through k as the loop performs them, each writing the entries top, top - 1, ..., down
-to its own number. `computeState` runs all of them. -/
-def computeStatePasses (top : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
-  | 0, y => y
-  | k + 1, y => computeStatePass (k + 1) top (computeStatePasses top k y)
+/-- Passes 1 through k as the loop performs them. `computeState` runs all of them. -/
+def computeStatePasses (d : ℕ) : ℕ → Vector G (d + 1) → Vector G (d + 1)
+  | 0, v => v
+  | k + 1, v => computeStatePass d (k + 1) d le_rfl (computeStatePasses d k v)
 
-/-- On an array of d + 1 entries, k passes of the loop are the k all-at-once passes. -/
-private theorem truncate_computeStatePasses (d k : ℕ) (y : ℕ → G) :
-    truncate d (computeStatePasses d k y) = truncate d (diffPasses k y) := by
+/-- If toFun v and g agree on the first d + 1 entries, k passes of the loop on v are the k
+all-at-once passes on g. -/
+private theorem toFun_computeStatePasses {d : ℕ} {v : Vector G (d + 1)} {g : ℕ → G}
+    (hg : toFun v = truncate d g) (k : ℕ) :
+    toFun (computeStatePasses d k v) = truncate d (diffPasses k g) := by
   induction k with
-  | zero => rfl
+  | zero => exact hg
   | succ k ih =>
-      rw [computeStatePasses, diffPasses, truncate_computeStatePass (by omega)]
-      exact truncate_diffPass_congr ih
+      rw [computeStatePasses, toFun_computeStatePass_top (by omega), ih, diffPasses]
+      exact truncate_diffPass_congr (by funext j; by_cases hj : j ≤ d <;> simp [truncate, hj])
 
-/-- `fastcrypto`'s `compute_state`: all d passes over an array of d + 1 entries. -/
-def computeState (d : ℕ) (y : ℕ → G) : ℕ → G := computeStatePasses d d y
+/-- `fastcrypto`'s `compute_state`: all d passes over d + 1 entries. -/
+def computeState (d : ℕ) (v : Vector G (d + 1)) : Vector G (d + 1) := computeStatePasses d d v
 
-/-- On an array of d + 1 entries, the initialisation loop builds what the d all-at-once passes
-build. -/
-theorem truncate_computeState (d : ℕ) (y : ℕ → G) :
-    truncate d (computeState d y) = truncate d (diffPasses d y) :=
-  truncate_computeStatePasses d d y
+/-- If toFun v and g agree on the first d + 1 entries, the initialisation loop on v builds what the
+d all-at-once passes build on g. -/
+theorem toFun_computeState {d : ℕ} {v : Vector G (d + 1)} {g : ℕ → G}
+    (hg : toFun v = truncate d g) :
+    toFun (computeState d v) = truncate d (diffPasses d g) :=
+  toFun_computeStatePasses hg d
 
-/-- If Δ_h^{d+1} f = 0, then initialising an array of d + 1 entries from the values f(x), f(x + h),
-..., f(x + d·h) and applying the update loop i times leaves f(x + i·h) in entry 0. -/
+/-- If Δ_h^{d+1} f = 0, then initialising d + 1 entries from the values f(x), f(x + h), ...,
+f(x + d·h) and applying the update loop i times leaves f(x + i·h) in entry 0. -/
 theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
     (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
-    (iterateState d)^[i] (computeState d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
-  rw [← next_iterate_diffPasses_zero hf x i, ← truncate_computeState,
-    ← truncate_iterateState_iterate]
-  simp [truncate]
+    ((iterateState d)^[i] (computeState d (Vector.ofFn fun j ↦ f (x + (j : ℕ) • h))))[0]
+      = f (x + i • h) := by
+  have hv : toFun (Vector.ofFn fun j : Fin (d + 1) ↦ f (x + (j : ℕ) • h))
+      = truncate d (fun j ↦ f (x + j • h)) := by
+    funext j
+    by_cases hj : j ≤ d
+    · simp [toFun, truncate, hj, show j < d + 1 by omega]
+    · simp [toFun, truncate, hj, show ¬ j < d + 1 by omega]
+  have e := congrFun (toFun_iterateState_iterate d i
+    (computeState d (Vector.ofFn fun j ↦ f (x + (j : ℕ) • h)))) 0
+  rw [toFun_computeState hv, next_iterate_diffPasses_zero hf x i] at e
+  simpa [toFun] using e
+
+/-! ### The evaluator -/
+
+/-- `fastcrypto`'s `PolynomialEvaluator`: the state, whether next has yet to be called, the current
+index and the step. -/
+structure Evaluator (M G : Type*) (d : ℕ) where
+  state : Vector G (d + 1)
+  first : Bool
+  index : M
+  step : M
+
+/-- `fastcrypto`'s `PolynomialEvaluator::new`. -/
+def Evaluator.new (d : ℕ) (f : M → G) (initial step : M) : Evaluator M G d where
+  state := computeState d (Vector.ofFn fun j ↦ f (initial + (j : ℕ) • step))
+  first := true
+  index := initial
+  step := step
+
+/-- `fastcrypto`'s `next`: it outputs the index and entry 0 of the state, after advancing both
+unless this is the first call. -/
+def Evaluator.next {d : ℕ} (e : Evaluator M G d) : (M × G) × Evaluator M G d :=
+  if e.first then ((e.index, e.state[0]), { e with first := false })
+  else
+    let e' : Evaluator M G d :=
+      { e with index := e.index + e.step, state := iterateState d e.state }
+    ((e'.index, e'.state[0]), e')
+
+/-- After i + 1 calls to next, the evaluator holds the state after i updates, at index x + i·h. -/
+theorem Evaluator.iterate_next_new {h : M} {f : M → G} {d : ℕ} (x : M) (i : ℕ) :
+    (fun e : Evaluator M G d ↦ e.next.2)^[i + 1] (Evaluator.new d f x h)
+      = ⟨(iterateState d)^[i] (computeState d (Vector.ofFn fun j ↦ f (x + (j : ℕ) • h))),
+          false, x + i • h, h⟩ := by
+  induction i with
+  | zero => simp [Evaluator.next, Evaluator.new]
+  | succ i ih =>
+      rw [iterate_succ_apply', ih]
+      simp [Evaluator.next, iterate_succ_apply', succ_nsmul, add_assoc]
+
+/-- If Δ_h^{d+1} f = 0, then call i of next outputs (x + i·h, f(x + i·h)). -/
+theorem Evaluator.next_iterate_new {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0)
+    (x : M) (i : ℕ) :
+    ((fun e : Evaluator M G d ↦ e.next.2)^[i] (Evaluator.new d f x h)).next.1
+      = (x + i • h, f (x + i • h)) := by
+  cases i with
+  | zero =>
+      have := iterateState_iterate_computeState_zero hf x 0
+      simp_all [Evaluator.next, Evaluator.new]
+  | succ i =>
+      rw [Evaluator.iterate_next_new]
+      have := iterateState_iterate_computeState_zero hf x (i + 1)
+      simp_all [Evaluator.next, iterate_succ_apply', succ_nsmul, add_assoc]
 
 section Eval
 
@@ -300,14 +393,13 @@ theorem Poly.fwdDiff_iter_eval_eq_zero (P : Poly V) {n : ℕ} (hn : P.degree < n
   funext x
   simp
 
-/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. Initialising an array of d + 1 entries
-from the values P(x), P(x + h), ..., P(x + d·h), where d is the degree of P, and applying the
-update loop i times leaves P(x + i·h) in entry 0. -/
-theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
-    (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
-      = P.eval (x + i * h) := by
-  have hf := P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h
-  simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
+/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`: call i of next on the evaluator for P,
+started at x with step h, outputs (x + i·h, P(x + i·h)). -/
+theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
+    ((fun e : Evaluator R V P.degree ↦ e.next.2)^[i] (Evaluator.new P.degree P.eval x h)).next.1
+      = (x + i * h, P.eval (x + i * h)) := by
+  simpa [nsmul_eq_mul] using
+    Evaluator.next_iterate_new (P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h) x i
 
 end Coeffs
 
