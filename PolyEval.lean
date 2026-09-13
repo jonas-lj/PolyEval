@@ -46,11 +46,9 @@ theorem next_table (h : M) (f : M → G) (x : M) : next (table h f x) = table h 
 /-- Applying next i times to the table of f at x gives the table of f at x + i·h. -/
 theorem next_iterate (h : M) (f : M → G) (x : M) (i : ℕ) :
     next^[i] (table h f x) = table h f (x + i • h) := by
-  induction i generalizing x with
-  | zero => simp
-  | succ i ih =>
-      rw [iterate_succ_apply, next_table, ih, succ_nsmul]
-      abel_nf
+  have := Semiconj.iterate_right (f := table h f) (ga := (· + h)) (gb := next)
+    (fun x ↦ (next_table h f x).symm) i x
+  simpa [add_right_iterate] using this.symm
 
 /-- After applying next i times to the table of f at x, entry 0 is f(x + i·h). -/
 theorem next_iterate_zero (h : M) (f : M → G) (x : M) (i : ℕ) :
@@ -88,22 +86,12 @@ theorem diffPasses_apply (h x : M) (f : M → G) (k j : ℕ) :
         simp [fwdDiff]
       · rw [if_neg hj, ih, min_eq_left (by omega : j ≤ k), min_eq_left (by omega : j ≤ k + 1)]
 
-/-- After k passes over the values f(x), f(x + h), f(x + 2h), ..., entry j is Δ_h^j f(x) for
-every j ≤ k. -/
-theorem diffPasses_eq_table (h x : M) (f : M → G) {k j : ℕ} (hj : j ≤ k) :
-    diffPasses k (fun i ↦ f (x + i • h)) j = table h f x j := by
-  rw [diffPasses_apply, min_eq_left hj]
-  simp [table]
-
-/-- Δ_h^k 0 = 0 -/
-private theorem fwdDiff_iter_zero (h : M) (k : ℕ) : Δ_[h]^[k] (0 : M → G) = 0 := by
-  simpa only [fwdDiff_aux.coe_fwdDiffₗ_pow] using map_zero (fwdDiff_aux.fwdDiffₗ M G h ^ k)
-
 /-- Δ_h^{d+1} f = 0 and d < j imply Δ_h^j f = 0 -/
 theorem fwdDiff_iter_eq_zero_of_lt {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1] f = 0) {j : ℕ}
     (hj : d < j) : Δ_[h]^[j] f = 0 := by
   obtain ⟨k, rfl⟩ : ∃ k, j = k + (d + 1) := ⟨j - (d + 1), by omega⟩
-  rw [iterate_add_apply, hf, fwdDiff_iter_zero]
+  rw [iterate_add_apply, hf]
+  simpa only [fwdDiff_aux.coe_fwdDiffₗ_pow] using map_zero (fwdDiff_aux.fwdDiffₗ M G h ^ k)
 
 /-- If Δ_h^{d+1} f = 0, then the d passes over the values f(x), f(x + h), ..., f(x + d·h), read as
 an array of d + 1 entries, give the table of f at x. -/
@@ -111,7 +99,7 @@ theorem truncate_diffPasses {h : M} {f : M → G} {d : ℕ} (hf : Δ_[h]^[d + 1]
     truncate d (diffPasses d fun j ↦ f (x + j • h)) = table h f x := by
   funext j
   by_cases hj : j ≤ d
-  · simpa [truncate, hj] using diffPasses_eq_table h x f hj
+  · simp [truncate, hj, table, diffPasses_apply]
   · simp [truncate, hj, table, fwdDiff_iter_eq_zero_of_lt hf (by omega : d < j)]
 
 /-- If Δ_h^{d+1} f = 0, then the d passes over the values f(x), f(x + h), ..., f(x + d·h), read as
@@ -230,22 +218,15 @@ theorem truncate_computeState (d : ℕ) (y : ℕ → G) :
 theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
     (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
     (iterateState d)^[i] (computeState d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
-  have h0 : ∀ z : ℕ → G, (iterateState d)^[i] z 0 = next^[i] (truncate d z) 0 := fun z ↦ by
-    rw [← truncate_iterateState_iterate]
-    simp [truncate]
-  rw [h0, truncate_computeState]
-  exact next_iterate_diffPasses_zero hf x i
+  rw [← next_iterate_diffPasses_zero hf x i, ← truncate_computeState,
+    ← truncate_iterateState_iterate]
+  simp [truncate]
 
 section Eval
 
 open Polynomial
 
 variable {R : Type*} [CommRing R]
-
-/-- Differencing s ↦ g(h·s + x) with step 1, at t, gives Δ_h g at h·t + x. -/
-private theorem fwdDiff_comp_affine (h x : R) (g : R → G) (t : R) :
-    Δ_[1] (fun s ↦ g (h * s + x)) t = Δ_[h] g (h * t + x) := by
-  simp [fwdDiff, mul_add, add_right_comm]
 
 /-- Differencing s ↦ g(h·s + x) n times with step 1, at t, gives Δ_h^n g at h·t + x. -/
 theorem fwdDiff_iter_comp_affine (n : ℕ) (h x : R) (g : R → G) (t : R) :
@@ -255,7 +236,7 @@ theorem fwdDiff_iter_comp_affine (n : ℕ) (h x : R) (g : R → G) (t : R) :
   | succ n ih =>
       rw [iterate_succ_apply, iterate_succ_apply,
         show (Δ_[1] fun s ↦ g (h * s + x)) = fun s ↦ Δ_[h] g (h * s + x) from
-          funext (fwdDiff_comp_affine h x g)]
+          funext fun t ↦ by simp [fwdDiff, mul_add, add_right_comm]]
       exact ih (Δ_[h] g)
 
 /-- Δ_h^n P = 0 for deg P < n, at any step h -/
