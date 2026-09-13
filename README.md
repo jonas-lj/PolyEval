@@ -23,9 +23,9 @@ multiplications of Horner's rule.
 * `PolyEval.eval_range_correct` — correctness of the algorithm as an implementation runs it:
 
   ```lean
-  theorem eval_range_correct (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-      (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
-        = evalCoeffs d c (x + i * h)
+  theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
+      (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
+        = P.eval (x + i * h)
   ```
 
   Read the left-hand side inside out, which is also the order things happen: the values of the
@@ -33,11 +33,11 @@ multiplications of Horner's rule.
   then the head of the array. Each loop carries its visit order, so it lines up with the code
   statement by statement.
 
-  `evalCoeffs d c` has its coefficients in a module `V` over `R` and its variable in `R`, which is
-  the shape of `fastcrypto`'s `Poly<C>`. `Polynomial R` does not describe those, since it puts the
+  A `Poly V` has its coefficients in a module `V` over `R` and its variable in `R`, which is the
+  shape of `fastcrypto`'s `Poly<C>`. `Polynomial R` does not describe those, since it puts the
   coefficients and the variable in the same ring. A ring is a module over itself, so this also
-  covers `Poly<C::ScalarType>`, and a `Polynomial R` reduces to it by rewriting `P.eval` as
-  `evalCoeffs d P.coeff`, which holds when `P.natDegree ≤ d`.
+  covers `Poly<C::ScalarType>`, and a `Polynomial R` of degree at most `d` is the `Poly R` with
+  that degree and the same coefficients.
 
 * `PolyEval.iterateState_iterate_computeState_zero` — the same for an arbitrary `f` killed by
   `d + 1` differences. Being a polynomial is used nowhere else, so that one hypothesis is all a
@@ -70,8 +70,9 @@ Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbe
 
 | Lean | fastcrypto |
 | --- | --- |
-| `evalCoeffs d c` | the coefficients of [`Poly<C>`][poly], summed by [`eval`][eval] |
-| `d` | [`degree`][degree], the index of the last non-zero coefficient |
+| `Poly V` | [`Poly<C>`][poly] |
+| `P.eval` | [`eval`][eval] |
+| `d`, that is `P.degree` | [`degree`][degree], the index of the last non-zero coefficient |
 | the values at the first `d + 1` points | [`new`][new] |
 | `computeState d` | [`compute_state`][compute_state] |
 | `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |

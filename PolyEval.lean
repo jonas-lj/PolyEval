@@ -280,6 +280,12 @@ theorem fwdDiff_iter_pow_eq_zero {k n : ℕ} (hk : k < n) (h : R) :
 
 end Eval
 
+/-- A polynomial with coefficients c_0, ..., c_degree in V, as `fastcrypto`'s `Poly<C>` stores them.
+Coefficients past `degree` are ignored. -/
+structure Poly (V : Type*) where
+  degree : ℕ
+  coeff : ℕ → V
+
 section Coeffs
 
 open Finset Polynomial
@@ -287,8 +293,7 @@ open Finset Polynomial
 variable {R : Type*} [CommRing R] {V : Type*} [AddCommGroup V] [Module R V]
 
 /-- The polynomial function P(x) = ∑_{k ≤ d} x^k · c_k, with coefficients c_k in a module V over R
-and the variable running over R. This is the function `fastcrypto`'s `Poly::eval` computes, with
-group elements as coefficients and a scalar variable, a case `Polynomial R` does not describe. -/
+and the variable running over R, a case `Polynomial R` does not describe. -/
 def evalCoeffs (d : ℕ) (c : ℕ → V) : R → V := fun x ↦ ∑ k ∈ range (d + 1), x ^ k • c k
 
 /-- For a fixed v, differencing y ↦ p(y)·v n times gives y ↦ (Δ_h^n p)(y)·v. -/
@@ -313,14 +318,17 @@ theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V)
   funext x
   simp
 
-/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. For P(x) = ∑_{k ≤ d} x^k · c_k,
-initialising an array of d + 1 entries from the values P(x), P(x + h), ..., P(x + d·h) and
-applying the update loop i times leaves P(x + i·h) in entry 0. -/
-theorem eval_range_correct (d : ℕ) (c : ℕ → V) (h x : R) (i : ℕ) :
-    (iterateState d)^[i] (computeState d fun j ↦ evalCoeffs d c (x + j * h)) 0
-      = evalCoeffs d c (x + i * h) := by
-  have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self d) c h
-  simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
+/-- P(x) = ∑_{k ≤ degree} x^k · c_k, the function `fastcrypto`'s `Poly::eval` computes. -/
+def Poly.eval (P : Poly V) (x : R) : V := evalCoeffs P.degree P.coeff x
+
+/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. Initialising an array of d + 1 entries
+from the values P(x), P(x + h), ..., P(x + d·h), where d is the degree of P, and applying the
+update loop i times leaves P(x + i·h) in entry 0. -/
+theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
+    (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
+      = P.eval (x + i * h) := by
+  have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self P.degree) P.coeff h
+  simpa [Poly.eval, nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
 end Coeffs
 
