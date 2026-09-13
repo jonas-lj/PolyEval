@@ -292,9 +292,10 @@ open Finset Polynomial
 
 variable {R : Type*} [CommRing R] {V : Type*} [AddCommGroup V] [Module R V]
 
-/-- The polynomial function P(x) = ∑_{k ≤ d} x^k · c_k, with coefficients c_k in a module V over R
-and the variable running over R, a case `Polynomial R` does not describe. -/
-def evalCoeffs (d : ℕ) (c : ℕ → V) : R → V := fun x ↦ ∑ k ∈ range (d + 1), x ^ k • c k
+/-- P(x) = ∑_{k ≤ degree} x^k · c_k, with coefficients in a module V over R and the variable in R,
+a case `Polynomial R` does not describe. This is the function `fastcrypto`'s `Poly::eval`
+computes. -/
+def Poly.eval (P : Poly V) (x : R) : V := ∑ k ∈ range (P.degree + 1), x ^ k • P.coeff k
 
 /-- For a fixed v, differencing y ↦ p(y)·v n times gives y ↦ (Δ_h^n p)(y)·v. -/
 theorem fwdDiff_iter_smul_const (n : ℕ) (h : R) (p : R → R) (v : V) :
@@ -307,19 +308,16 @@ theorem fwdDiff_iter_smul_const (n : ℕ) (h : R) (p : R → R) (v : V) :
           funext y; simp [fwdDiff, sub_smul]]
       exact ih (Δ_[h] p)
 
-/-- Δ_h^n P = 0 for d < n, at any step h, where P(x) = ∑_{k ≤ d} x^k · c_k. -/
-theorem fwdDiff_iter_evalCoeffs_eq_zero {d n : ℕ} (hd : d < n) (c : ℕ → V) (h : R) :
-    Δ_[h]^[n] (evalCoeffs d c : R → V) = 0 := by
-  rw [show (evalCoeffs d c : R → V) = ∑ k ∈ range (d + 1), fun x : R ↦ x ^ k • c k from by
-    funext x; simp [evalCoeffs], fwdDiff_iter_finsetSum]
+/-- Δ_h^n P = 0 for degree < n, at any step h -/
+theorem Poly.fwdDiff_iter_eval_eq_zero (P : Poly V) {n : ℕ} (hn : P.degree < n) (h : R) :
+    Δ_[h]^[n] (P.eval : R → V) = 0 := by
+  rw [show (P.eval : R → V) = ∑ k ∈ range (P.degree + 1), fun x : R ↦ x ^ k • P.coeff k from by
+    funext x; simp [Poly.eval], fwdDiff_iter_finsetSum]
   refine sum_eq_zero fun k hk ↦ ?_
   have hk' : k < n := by have := mem_range.mp hk; omega
-  rw [fwdDiff_iter_smul_const n h (fun x : R ↦ x ^ k) (c k), fwdDiff_iter_pow_eq_zero hk' h]
+  rw [fwdDiff_iter_smul_const n h (fun x : R ↦ x ^ k) (P.coeff k), fwdDiff_iter_pow_eq_zero hk' h]
   funext x
   simp
-
-/-- P(x) = ∑_{k ≤ degree} x^k · c_k, the function `fastcrypto`'s `Poly::eval` computes. -/
-def Poly.eval (P : Poly V) (x : R) : V := evalCoeffs P.degree P.coeff x
 
 /-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. Initialising an array of d + 1 entries
 from the values P(x), P(x + h), ..., P(x + d·h), where d is the degree of P, and applying the
@@ -327,8 +325,8 @@ update loop i times leaves P(x + i·h) in entry 0. -/
 theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
     (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
       = P.eval (x + i * h) := by
-  have hf := fwdDiff_iter_evalCoeffs_eq_zero (Nat.lt_succ_self P.degree) P.coeff h
-  simpa [Poly.eval, nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
+  have hf := P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h
+  simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
 end Coeffs
 
