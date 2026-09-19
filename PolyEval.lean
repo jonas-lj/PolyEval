@@ -140,11 +140,6 @@ theorem truncate_iterateState (d : ℕ) (y : ℕ → G) :
   simp only [truncate, next, iterateState_apply]
   split_ifs <;> first | rfl | (exfalso; omega) | simp
 
-/-- On an array of d + 1 entries, i runs of the loop are i applications of next. -/
-theorem truncate_iterateState_iterate (d i : ℕ) (y : ℕ → G) :
-    truncate d ((iterateState d)^[i] y) = next^[i] (truncate d y) :=
-  Semiconj.iterate_right (truncate_iterateState d) i y
-
 /-- One differencing pass as the loop performs it: the writes y_j ← y_j - y_{j-1} for
 j = top, top - 1, ..., k, one entry at a time in decreasing j. -/
 def computeStatePass (k : ℕ) : ℕ → (ℕ → G) → (ℕ → G)
@@ -213,35 +208,32 @@ theorem truncate_computeState (d : ℕ) (y : ℕ → G) :
     truncate d (computeState d y) = truncate d (diffPasses d y) :=
   truncate_computeStatePasses d d y
 
-/-- If Δ_h^{d+1} f = 0, then initialising an array of d + 1 entries from the values f(x), f(x + h),
-..., f(x + d·h) and applying the update loop i times leaves f(x + i·h) in entry 0. -/
-theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
-    (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
-    (iterateState d)^[i] (computeState d fun j ↦ f (x + j • h)) 0 = f (x + i • h) := by
-  rw [← next_iterate_diffPasses_zero hf x i, ← truncate_computeState,
-    ← truncate_iterateState_iterate]
-  simp [truncate]
-
 /-- The array together with its last index, so that the loops can read their bound from it the way
 the Rust reads the length of its vector. -/
 structure State (G : Type*) where
   degree : ℕ
   entries : ℕ → G
 
-attribute [coe] State.entries
+/-- The state read as an array of degree + 1 entries, with everything past the end set to zero. -/
+@[coe] def State.toFun (s : State G) : ℕ → G := truncate s.degree s.entries
 
 /-- A state can be indexed directly, as the Rust indexes its vector. -/
-instance : CoeFun (State G) (fun _ ↦ ℕ → G) := ⟨State.entries⟩
+instance : CoeFun (State G) (fun _ ↦ ℕ → G) := ⟨State.toFun⟩
 
 /-- `fastcrypto`'s `iterate_state`, reading the bound from the state. -/
 def State.iterate (s : State G) : State G := ⟨s.degree, iterateState s.degree s.entries⟩
 
-/-- Iterating the loop keeps the degree and iterates the loop on the entries. -/
-theorem State.iterate_iterate (s : State G) (i : ℕ) :
-    State.iterate^[i] s = ⟨s.degree, (iterateState s.degree)^[i] s.entries⟩ := by
-  induction i with
-  | zero => rfl
-  | succ i ih => rw [iterate_succ_apply', ih, iterate_succ_apply']; rfl
+/-- One run of the loop is one application of next. -/
+theorem State.toFun_iterate (s : State G) : ⇑(State.iterate s) = next ⇑s :=
+  truncate_iterateState s.degree s.entries
+
+/-- If Δ_h^{d+1} f = 0, then initialising an array of d + 1 entries from the values f(x), f(x + h),
+..., f(x + d·h) and applying the update loop i times leaves f(x + i·h) in entry 0. -/
+theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
+    (hf : Δ_[h]^[d + 1] f = 0) (x : M) (i : ℕ) :
+    State.iterate^[i] ⟨d, computeState d fun j ↦ f (x + j • h)⟩ 0 = f (x + i • h) := by
+  rw [← next_iterate_diffPasses_zero hf x i, ← truncate_computeState]
+  exact congrFun (Semiconj.iterate_right State.toFun_iterate i _) 0
 
 section Eval
 
@@ -330,9 +322,8 @@ def State.init (P : Poly V) (x h : R) : State V :=
 state built for P, entry 0 is P(x + i·h). -/
 theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
     State.iterate^[i] (State.init P x h) 0 = P.eval (x + i * h) := by
-  rw [State.init, State.iterate_iterate]
   have hf := P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h
-  simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
+  simpa [State.init, nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
 end Coeffs
 
