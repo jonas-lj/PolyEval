@@ -222,6 +222,27 @@ theorem iterateState_iterate_computeState_zero {h : M} {f : M → G} {d : ℕ}
     ← truncate_iterateState_iterate]
   simp [truncate]
 
+/-- The array together with its last index, so that the loops can read their bound from it the way
+the Rust reads the length of its vector. -/
+structure State (G : Type*) where
+  degree : ℕ
+  entries : ℕ → G
+
+attribute [coe] State.entries
+
+/-- A state can be indexed directly, as the Rust indexes its vector. -/
+instance : CoeFun (State G) (fun _ ↦ ℕ → G) := ⟨State.entries⟩
+
+/-- `fastcrypto`'s `iterate_state`, reading the bound from the state. -/
+def State.iterate (s : State G) : State G := ⟨s.degree, iterateState s.degree s.entries⟩
+
+/-- Iterating the loop keeps the degree and iterates the loop on the entries. -/
+theorem State.iterate_iterate (s : State G) (i : ℕ) :
+    State.iterate^[i] s = ⟨s.degree, (iterateState s.degree)^[i] s.entries⟩ := by
+  induction i with
+  | zero => rfl
+  | succ i ih => rw [iterate_succ_apply', ih, iterate_succ_apply']; rfl
+
 section Eval
 
 open Polynomial
@@ -300,12 +321,16 @@ theorem Poly.fwdDiff_iter_eval_eq_zero (P : Poly V) {n : ℕ} (hn : P.degree < n
   funext x
   simp
 
-/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. Initialising an array of d + 1 entries
-from the values P(x), P(x + h), ..., P(x + d·h), where d is the degree of P, and applying the
-update loop i times leaves P(x + i·h) in entry 0. -/
-theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
-    (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
-      = P.eval (x + i * h) := by
+/-- The state `new` builds for P on the progression x, x + h, x + 2h, ...: the values at the first
+d + 1 points, differenced by the initialisation loop. -/
+def State.init (P : Poly V) (x h : R) : State V :=
+  ⟨P.degree, computeState P.degree fun j ↦ P.eval (x + j * h)⟩
+
+/-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. After i runs of the update loop on the
+state built for P, entry 0 is P(x + i·h). -/
+theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
+    State.iterate^[i] (State.init P x h) 0 = P.eval (x + i * h) := by
+  rw [State.init, State.iterate_iterate]
   have hf := P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h
   simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i
 
