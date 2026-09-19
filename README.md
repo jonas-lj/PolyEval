@@ -23,15 +23,14 @@ multiplications of Horner's rule.
 * `PolyEval.eval_range_correct` — correctness of the algorithm as an implementation runs it:
 
   ```lean
-  theorem eval_range_correct (P : Poly V) (h x : R) (i : ℕ) :
-      (iterateState P.degree)^[i] (computeState P.degree fun j ↦ P.eval (x + j * h)) 0
-        = P.eval (x + i * h)
+  theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
+      (State.iterate^[i] (State.init P x h)).entries 0 = P.eval (x + i * h)
   ```
 
-  Read the left-hand side inside out, which is also the order things happen: the values of the
-  polynomial at the first `d + 1` points, the initialisation loops, `i` runs of the update loop,
-  then the head of the array. Each loop carries its visit order, so it lines up with the code
-  statement by statement.
+  `State.init P x h` evaluates P at the first `d + 1` points and runs the initialisation loop, as
+  `new` does. `State.iterate` runs the update loop, reading the array length from the state as
+  `iterate_state` reads it from the vector. The statement is about entry 0 after `i` runs. Each loop
+  carries its visit order, so it lines up with the code statement by statement.
 
   A `Poly V` has its coefficients in a module `V` over `R` and its variable in `R`, which is the
   shape of `fastcrypto`'s `Poly<C>`. `Polynomial R` does not describe those, since it puts the
@@ -73,11 +72,11 @@ Line links are pinned to commit [`45ec479`][eval_range_pinned], since line numbe
 | `Poly V` | [`Poly<C>`][poly] |
 | `P.eval` | [`eval`][eval] |
 | `d`, that is `P.degree` | [`degree`][degree], the index of the last non-zero coefficient |
-| the values at the first `d + 1` points | [`new`][new] |
+| `State.init P x h` | the state [`new`][new] builds |
 | `computeState d` | [`compute_state`][compute_state] |
-| `truncate d` | `state` being a [`Vec` of `d + 1` entries][evaluator] |
+| `State` | [`state`][evaluator], a `Vec` of `d + 1` entries that knows its length |
 | `iterateState d` | [`iterate_state`][iterate_state] |
-| `(iterateState d)^[i] ... 0` | [`next`][next], which skips the update on the first call |
+| `State.iterate^[i]`, entry 0 | [`next`][next], which skips the update on the first call |
 | `eval_range_correct` | [`eval_range`][eval_range_pinned] |
 
 `iterateState` and `computeState` are named for the Rust functions they model, and write one entry
