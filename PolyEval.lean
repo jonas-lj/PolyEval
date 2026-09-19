@@ -228,6 +228,11 @@ structure State (G : Type*) where
   degree : ℕ
   entries : ℕ → G
 
+attribute [coe] State.entries
+
+/-- A state can be indexed directly, as the Rust indexes its vector. -/
+instance : CoeFun (State G) (fun _ ↦ ℕ → G) := ⟨State.entries⟩
+
 /-- `fastcrypto`'s `iterate_state`, reading the bound from the state. -/
 def State.iterate (s : State G) : State G := ⟨s.degree, iterateState s.degree s.entries⟩
 
@@ -324,7 +329,7 @@ def State.init (P : Poly V) (x h : R) : State V :=
 /-- Correctness of `Poly::eval_range` in `fastcrypto-tbls`. After i runs of the update loop on the
 state built for P, entry 0 is P(x + i·h). -/
 theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
-    (State.iterate^[i] (State.init P x h)).entries 0 = P.eval (x + i * h) := by
+    State.iterate^[i] (State.init P x h) 0 = P.eval (x + i * h) := by
   rw [State.init, State.iterate_iterate]
   have hf := P.fwdDiff_iter_eval_eq_zero (Nat.lt_succ_self P.degree) h
   simpa [nsmul_eq_mul] using iterateState_iterate_computeState_zero hf x i

@@ -24,7 +24,7 @@ multiplications of Horner's rule.
 
   ```lean
   theorem eval_range_correct (P : Poly V) (x h : R) (i : ℕ) :
-      (State.iterate^[i] (State.init P x h)).entries 0 = P.eval (x + i * h)
+      State.iterate^[i] (State.init P x h) 0 = P.eval (x + i * h)
   ```
 
   `State.init P x h` evaluates P at the first `d + 1` points and runs the initialisation loop, as
